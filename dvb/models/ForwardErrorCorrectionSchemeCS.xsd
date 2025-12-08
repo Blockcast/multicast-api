@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ClassificationScheme uri="urn:ietf:rmt:fec:encoding">
+<Term termID="0">
+ <Name xml:lang="en">Compact No-Code FEC Scheme</Name>
+ <Definition xml:lang="en">As specified in IETF RFC 5445 Section 3.</Definition>
+</Term>
+<Term termID="1">
+ <Name xml:lang="en">Raptor Forward Error Correction Scheme for Object Delivery</Name>
+ <Definition xml:lang="en">As specified in IETF RFC 5053.</Definition>
+</Term>
+<Term termID="6">
+ <Name xml:lang="en">RaptorQ Forward Error Correction Scheme for Object Delivery</Name>
+ <Definition xml:lang="en">As specified in IETF RFC 6330.</Definition>
+</Term>
+</ClassificationScheme>

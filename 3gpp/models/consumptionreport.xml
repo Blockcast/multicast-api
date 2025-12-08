@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<consumptionReport xsi:schemaLocation="urn:3gpp:metadata:2014:MBMS:consumptionreport consumptionreport.xsd"
+        xmlns="urn:3gpp:metadata:2014:MBMS:consumptionreport"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:sv="urn:3gpp:metadata:2009:MBMS:schemaVersion">
+ serviceId="urn:examplecom:1234567890hotdog" consumptiontype="1" reportTime="2014- 08-04T09:30:47Z" clientId="9410788021">
+    <locationCGI>12345</locationCGI>
+    <sv:schemaVersion>1</sv:schemaVersion> </consumptionReport>

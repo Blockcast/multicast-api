@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bundleDescription
+        xmlns="urn:3GPP:metadata:2005:MBMS:userServiceDescription"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xmlns:sv="urn:3gpp:metadata:2009:MBMS:schemaVersion"
+        xsi:schemaLocation="urn:3GPP:metadata:2005:MBMS:userServiceDescription
+ USD-schema-main.xsd"
+        fecDescriptionURI="http://www.example.com/3gpp/mbms/session1-fec.sdp">
+    <userServiceDescription serviceId="urn:3gpp:1234567890coolcat">
+        <name lang="EN">Welcome</name>
+        <name lang="DE">Willkommen</name>
+        <name lang="FR">Bienvenue</name>
+        <name lang="FI">Tervetuloa</name>
+        <serviceLanguage>EN</serviceLanguage>
+        <serviceLanguage>DE</serviceLanguage>
+        <requiredCapabilities>
+            <feature>0</feature>
+        </requiredCapabilities>
+        <deliveryMethod accessGroupId="1"
+                        sessionDescriptionURI="http://www.example.com/3gpp/mbms/session1.sdp">
+            <sv:delimiter>0</sv:delimiter>
+            <sv:delimiter>0</sv:delimiter>
+        </deliveryMethod>
+        <deliveryMethod sessionDescriptionURI="http://www.example.com/3gpp/mbms/session2.sdp"
+                        associatedProcedureDescriptionURI="http://www.example.com/3gpp/mbms/procedureX.xml">
+            <sv:delimiter>0</sv:delimiter>
+            <sv:delimiter>0</sv:delimiter>
+        </deliveryMethod>
+        <deliveryMethod sessionDescriptionURI="http://www.example.com/3gpp/mbms/session3.sdp"
+                        associatedProcedureDescriptionURI="http://www.example.com/3gpp/mbms/procedureY.xml">
+            <sv:delimiter>0</sv:delimiter>
+            <sv:delimiter>0</sv:delimiter>
+        </deliveryMethod>
+        <deliveryMethod accessGroupId="2"
+                        sessionDescriptionURI="http://www.example.com/3gpp/mbms/session4.sdp">
+            <sv:delimiter>0</sv:delimiter>
+            <sv:delimiter>0</sv:delimiter>
+        </deliveryMethod>
+        <accessGroup id="1">
+            <accessBearer>3GPP.R6.GERAN</accessBearer>
+            <accessBearer>3GPP.R6.UTRAN</accessBearer>
+        </accessGroup>
+        <accessGroup id="2">
+            <accessBearer>3GPP.R6.UTRAN</accessBearer>
+        </accessGroup>
+        <sv:delimiter>0</sv:delimiter>
+        <sv:delimiter>0</sv:delimiter>
+    </userServiceDescription>
+    <sv:schemaVersion></

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns="urn:3GPP:metadata:2007:MBMS:userServiceDescription"
+           xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="urn:3GPP:metadata:2007:MBMS:userServiceDescription"
+           elementFormDefault="qualified">
+    <xs:element name="initiationRandomization">
+        <xs:complexType>
+            <xs:attribute name="initiationStartTime" type="xs:unsignedInt" use="optional"/>
+            <xs:attribute name="protectionPeriod" type="xs:unsignedInt" use="required"/>
+            <xs:attribute name="randomTimePeriod" type="xs:unsignedInt" use="required"/>
+        </xs:complexType>
+    </xs:element>
+    <xs:element name="terminationRandomization">
+        <xs:complexType>
+            <xs:attribute name="protectionPeriod" type="xs:unsignedInt" use="required"/>
+            <xs:attribute name="randomTimePeriod" type="xs:unsignedInt" use="required"/>
+        </xs:complexType>
+    </xs:element>
+    <xs:element name="serviceGroup" type="serviceGroupType"/>
+    <xs:complexType name="serviceGroupType">
+        <xs:attribute name="groupID" type="xs:anyURI" use="required"/>
+    </xs:complexType>
+    <xs:element name="unicastAccessURI" type="xs:anyURI"/>
+    <xs:attribute name="serviceClass" type="xs:string"/>
+</xs:schema>

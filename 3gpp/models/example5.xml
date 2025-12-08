@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bundleDescription
+        fecDescriptionURI="http://www.example.com/3gpp/mbms/session1-fec.sdp"
+        xsi:schemaLocation="urn:3GPP:metadata:2005:MBMS:userServiceDescription USD-schema-main.xsd"
+        xmlns="urn:3GPP:metadata:2005:MBMS:userServiceDescription" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:r7="urn:3GPP:metadata:2007:MBMS:userServiceDescription" xmlns:r8="urn:3GPP:metadata:2008:MBMS:userServiceDescription" xmlns:r9="urn:3GPP:metadata:2009:MBMS:userServiceDescription" xmlns:r12="urn:3GPP:metadata:2013:MBMS:userServiceDescription"
+        xmlns:r14="urn:3GPP:metadata:2017:r14:MBMS:userServiceDescription"
+        xmlns:r15="urn:3GPP:metadata:2018:r15:MBMS:userServiceDescription"
+        xmlns:sv="urn:3gpp:metadata:2009:MBMS:schemaVersion">
+    <userServiceDescription serviceId="urn:3gpp:12345superduper">
+        <name lang="EN">The Super Duper Service</name>
+        <serviceLanguage>EN</serviceLanguage>
+        <deliveryMethod associatedProcedureDescriptionURI=" http://www.example.com/3gpp/mbms/procedureX.xml" sessionDescriptionURI=" http://www.example.com/3gpp/mbms/session1.sdp">
+            <sv:delimiter>0</sv:delimiter>
+            <r12:broadcastAppService>
+                <r12:basePattern>http://example.com/bc/rep-512k</r12:basePattern>
+                <r12:basePattern>http://example.com/bc/en</r12:basePattern>
+            </r12:broadcastAppService>
+            <r12:unicastAppService>
+                <r12:basePattern>http://example.com/uc/rep-256k</r12:basePattern>
+                <r12:basePattern>http://example.com/uc/en</r12:basePattern>
+            </r12:unicastAppService>
+            <sv:delimiter>0</sv:delimiter>
+            <r15:supplementaryUnicastAppService>
+                <r15:basePattern>http://example.com/uc/es</r15:basePattern>
+            </r15:supplementaryUnicastAppService>
+            <sv:delimiter>0</sv:delimiter>
+        </deliveryMethod>
+        <r9:mediaPresentationDescription>
+            <r9:mpdURI>http://example.com/MPD.mpd</r9:mpdURI>
+        </r9:mediaPresentationDescription>
+        <r9:schedule>
+            <r9:scheduleDescriptionURI>http://www.example.com/3gpp/mbms/schedule123.xml
+            </r9:scheduleDescriptionURI>
+        </r9:schedule>
+        <sv:delimiter>0</sv:delimiter>
+        <r12:appService appServiceDescriptionURI="http://www.example.com/MPD2.mpd" mimeType="application/dash+xml;profiles=urn:3GPP:PSS:profile:DASH10">
+        </r12:appService>
+        <sv:delimiter>0</sv:delimiter>
+    </userServiceDescription>
+    <sv:schemaVersion>4</sv:schemaVersion>
+</bundleDescription>

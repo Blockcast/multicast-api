@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MulticastGatewayConfiguration xmlns="urn:dvb:metadata:MulticastSessionConfiguration:2019"
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" validityPeriod="P1D">
+<!-- Special Multicast transport session used to transmit configuration to the population of Multicast
+gateways -->
+<MulticastGatewayConfigurationTransportSession transportSecurity="integrityAndAuthenticity">
+ <TransportProtocol protocolIdentifier="urn:dvb:metadata:cs:MulticastTransportProtocolCS:2019:FLUTE"
+protocolVersion="1"/>
+ <EndpointAddress>
+ <NetworkSourceAddress>10.1.100.1</NetworkSourceAddress>
+ <NetworkDestinationGroupAddress>232.99.1.1</NetworkDestinationGroupAddress>
+ <TransportDestinationPort>9999</TransportDestinationPort>
+ <MediaTransportSessionIdentfier>1</MediaTransportSessionIdentfier>
+ </EndpointAddress>
+ <EndpointAddress>
+ <NetworkSourceAddress>2001:DB8::4456:424D</NetworkSourceAddress>
+ <NetworkDestinationGroupAddress>FF3E::4950:4801</NetworkDestinationGroupAddress>
+ <TransportDestinationPort>9999</TransportDestinationPort>
+ <MediaTransportSessionIdentfier>1</MediaTransportSessionIdentfier>
+ </EndpointAddress>
+ <BitRate average="200" maximum="200"/>
+ <ForwardErrorCorrectionParameters>
+ <SchemeIdentifier>urn:ietf:rmt:fec:encoding:1</SchemeIdentifier> <!-- Raptor -->
+ <OverheadPercentage>20</OverheadPercentage>
+ <!-- Endpoint address omitted for FLUTE Sessions since this is always the same as the parent transport
+session -->
+ </ForwardErrorCorrectionParameters>
+</MulticastGatewayConfigurationTransportSession>
+<!-- Special Multicast transport session used to transmit configuration to the population of Multicast
+gateways -->
+<MulticastGatewayConfigurationTransportSession transportSecurity="integrityAndAuthenticity">
+ <TransportProtocol protocolIdentifier="urn:dvb:metadata:cs:MulticastTransportProtocolCS:2019:ROUTE"
+protocolVersion="1"/>
+ <EndpointAddress>
+ <NetworkSourceAddress>10.1.100.1</NetworkSourceAddress>
+ <NetworkDestinationGroupAddress>232.98.1.1</NetworkDestinationGroupAddress>
+ <TransportDestinationPort>9999</TransportDestinationPort>
+ <MediaTransportSessionIdentfier>1</MediaTransportSessionIdentfier>
+ </EndpointAddress>
+ <EndpointAddress>
+ <NetworkSourceAddress>2001:DB8::4456:424D</NetworkSourceAddress>
+ <NetworkDestinationGroupAddress>FF3E::4950:4701</NetworkDestinationGroupAddress>
+ <TransportDestinationPort>9999</TransportDestinationPort>
+ <MediaTransportSessionIdentfier>1</MediaTransportSessionIdentfier>
+ </EndpointAddress>
+ <BitRate average="200" maximum="200"/>
+ <ForwardErrorCorrectionParameters>
+<SchemeIdentifier>urn:ietf:rmt:fec:encoding:6</SchemeIdentifier> <!-- RaptorQ -->
+ <OverheadPercentage>20</OverheadPercentage>
+ <EndpointAddress>
+ <NetworkSourceAddress>10.1.100.1</NetworkSourceAddress>
+ <NetworkDestinationGroupAddress>232.99.1.1</NetworkDestinationGroupAddress>
+ <TransportDestinationPort>8888</TransportDestinationPort>
+ <MediaTransportSessionIdentfier>2</MediaTransportSessionIdentfier>
+ </EndpointAddress>
+ <EndpointAddress>
+ <NetworkSourceAddress>2001:DB8::4456:424D</NetworkSourceAddress>
+ <NetworkDestinationGroupAddress>FF3E::4950:4702</NetworkDestinationGroupAddress>
+ <TransportDestinationPort>8888</TransportDestinationPort>
+ <MediaTransportSessionIdentfier>2</MediaTransportSessionIdentfier>
+ </EndpointAddress>
+ </ForwardErrorCorrectionParameters>
+</MulticastGatewayConfigurationTransportSession>
+</MulticastGatewayConfiguration>

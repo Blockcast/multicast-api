@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<scheduleDescription
+        xmlns="urn:3gpp:metadata:2011:MBMS:scheduleDescription"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xmlns:sv="urn:3gpp:metadata:2009:MBMS:schemaVersion"
+        xsi:schemaLocation="urn:3gpp:metadata:2011:MBMS:scheduleDescription Schedule-Description-Main.xsd"
+        scheduleUpdate="2012-02-07T00:00:00Z"
+        version="764">
+    <sv:schemaVersion>3</sv:schemaVersion>
+    <serviceSchedule>
+        <sessionSchedule>
+            <start>2012-03-07T23:00:00Z</start>
+            <stop>2012-03-07T23:30:00Z</stop>
+            <reoccurencePattern>daily</reoccurencePattern>
+            <reoccurenceStopTime>2012-03-14T00:00:00Z</reoccurenceStopTime>
+            <sv:delimiter>0</sv:delimiter>
+            <sv:delimiter>0</sv:delimiter>
+        </sessionSchedule>
+        <fileSchedule>
+            <fileURI>file://fota.operator.com/swupdate/oem-1/model-1/image032212.apk</fileURI>
+            <deliveryInfo start="2012-03-07T23:00:00Z" end="2012-03-07T23:10:00Z"/>
+            <sv:delimiter>0</sv:delimiter>
+        </fileSchedule>
+        <fileSchedule>
+            <fileURI>file://fota.operator.com/swupdate/oem-1/model-2/image098798.apk</fileURI>
+            <deliveryInfo start="2012-03-07T23:10:00Z" end="2012-03-07T23:20:00Z"/>
+            <sv:delimiter>0</sv:delimiter>
+        </fileSchedule>
+        <fileSchedule>
+            <fileURI>file://fota.operator.com/swupdate/oem-1/model-3/image765987.apk</fileURI>
+            <deliveryInfo start="2012-03-07T23:20:00Z" end="2012-03-07T23:30:00Z"/>
+            <sv:delimiter>0</sv:delimiter>
+        </fileSchedule>
+    </serviceSchedule>
+</scheduleDescription>

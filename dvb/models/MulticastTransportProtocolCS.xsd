@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ClassificationScheme uri="urn:dvb:metadata:cs:MulticastTransportProtocolCS:2019">
+<Term termID="FLUTE">
+ <Name xml:lang="en">File Delivery over Unidirectional Transport</Name>
+  <Definition xml:lang="en">Version 1 (IETF RFC 3926), as profiled by ETSI TS 126 346 Release 16 and ETSI
+ TS 103 769.</Definition>
+</Term>
+<Term termID="ROUTE">
+ <Name xml:lang="en">Real-time Object delivery over Unidirectional Transport</Name>
+ <Definition xml:lang="en">Per ATSC A/331, as profiled by ETSI TS 103 769.</Definition>
+</Term>
+</ClassificationScheme>

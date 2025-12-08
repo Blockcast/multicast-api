@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="urn:3gpp:metadata:2005:MBMS:associatedProcedure-rel-12-extension" targetNamespace="urn:3gpp:metadata:2005:MBMS:associatedProcedure-rel-12-extension" elementFormDefault="qualified">
+    <xs:element name="consumptionReport" type="consumptionReportType"/>
+    <xs:complexType name="consumptionReportType"> <xs:sequence>
+        <xs:element name="serviceURI" type="xs:anyURI" maxOccurs="unbounded"/>
+        <xs:element name="location" type="uELocationType" minOccurs="0"/>
+        <xs:any namespace="##other" processContents="skip" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+        <xs:attribute name="samplePercentage" type="xs:decimal" default="100"/> <xs:attribute name="reportInterval" type="xs:duration"/>
+        <xs:attribute name="offsetTime" type="xs:unsignedLong"/>
+        <xs:attribute name="randomTimePeriod" type="xs:unsignedLong" use="required"/> <xs:attribute name="reportClientId" type="xs:boolean" default="0"/> <xs:anyAttribute processContents="skip"/>
+    </xs:complexType>
+    <xs:simpleType name="uELocationType">
+        <xs:union memberTypes="knownUELocationType xs:string"/>
+    </xs:simpleType>
+    <xs:simpleType name="knownUELocationType">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="CGI"/> <xs:enumeration value="ECGI"/> <xs:enumeration value="MBMS SAI"/>
+        </xs:restriction>
+    </xs:simpleType>
+</xs:schema>

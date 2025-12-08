@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema
+        xmlns="urn:3gpp:metadata:2012:MBMS:scheduleDescription"
+        xmlns:xs="http://www.w3.org/2001/XMLSchema"
+        targetNamespace="urn:3gpp:metadata:2012:MBMS:scheduleDescription"
+        elementFormDefault="qualified">
+    <xs:attribute name="sessionId" type="xs:string"/>
+    <xs:attribute name="fileMD5" type="xs:base64Binary"/>
+    <xs:attribute name="filterDescriptionReference" type="xs:anyURI"/>
+    <xs:element name="receptionFiltering">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="data" maxOccurs="unbounded">
+                    <xs:complexType>
+                        <xs:attribute name="filterID" type="xs:anyURI" use="required"/>
+                    </xs:complexType>
+                </xs:element>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+</xs:schema>

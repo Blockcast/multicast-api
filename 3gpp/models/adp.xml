@@ -1,0 +1,12 @@
+
+<?xml version="1.0" encoding="UTF-8"?> <associatedProcedureDescription
+        xmlns="urn:3gpp:metadata:2005:MBMS:associatedProcedure" xmlns:sv="urn:3gpp:metadata:2009:MBMS:schemaVersion" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="urn:3gpp:metadata:2005:MBMS:associatedProcedure associatedprocedure.xsd"> <postFileRepair
+        offsetTime="5"
+        randomTimePeriod="10"> <serviceURI>http://mbmsrepair0.example.com/path/repair_script</serviceURI> <serviceURI>http://mbmsrepair1.example.com/path1/repair_script</serviceURI> <serviceURI>http://mbmsrepair2.example.com/path2/repair_script</serviceURI> </postFileRepair>
+    <bmFileRepair sessionDescriptionURI="http://www.example.com/3gpp/mbms/session1.sdp"/>
+    <postReceptionReport
+            offsetTime="5"
+            randomTimePeriod="10" reportType="StaR-all" samplePercentage="100" forceTimeIndependence="0">
+        <serviceURI>http://mbmsreport.example.com/path/report_script</serviceURI> </postReceptionReport>
+    <sv:schemaVersion>1</sv:schemaVersion>
+</associatedProcedureDescription>

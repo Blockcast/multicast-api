@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns="urn:3gpp:metadata:2005:MBMS:associatedProcedure-rel-14-extension" xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:3gpp:metadata:2005:MBMS:associatedProcedure-rel-14-extension" elementFormDefault="qualified">
+    <xs:attribute name="reportInterval" type="xs:duration" use="optional"/> </xs:schema>

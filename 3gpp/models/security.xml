@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<securityDescription
+        xmlns="urn:3GPP:metadata:2005:MBMS:securityDescription"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="urn:3GPP:metadata:2005:MBMS:securityDescription security.xsd">
+    <keyManagement
+            offsetTime="5"
+            randomTimePeriod="10"
+            uiccKeyManagement="true">
+        <serverURI>http://register.operator.umts/</serverURI>
+        <serverURI>http://register2.operator.umts/</serverURI>
+    </keyManagement>
+    <keyId>
+        <mediaFlow flowID="224.1.2.3/4002">
+            <MSK>
+                <keyDomainID>aMoM</keyDomainID>
+                <MSKID>aMoAAA==</MSKID>
+            </MSK>
+        </mediaFlow>
+        <mediaFlow flowID="224.1.2.3/4004">
+            <MSK>
+                <keyDomainID>GM8M</keyDomainID>
+                <MSKID>aMkAAA==</MSKID>
+            </MSK>
+        </mediaFlow>
+    </keyId>
+    <fecProtection
+            fecEncodingId="1"
+            fecInstanceId="0"
+            fecOtiExtension="1SCxWEMNe397m24SwgyRhg=="/>
+</securityDescription>

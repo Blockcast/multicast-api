@@ -1,0 +1,427 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns="urn:dvb:metadata:MulticastSessionConfiguration:2019"
+xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:mpeg7="urn:mpeg:mpeg7:schema:2001"
+targetNamespace="urn:dvb:metadata:MulticastSessionConfiguration:2019" elementFormDefault="qualified"
+attributeFormDefault="unqualified">
+<xs:import namespace="urn:mpeg:mpeg7:schema:2001" schemaLocation="mpeg7_subset.xsd"/>
+<xs:simpleType name="decimalFraction">
+ <xs:annotation>
+ <xs:documentation>A fraction expressed as a decimal between 0.0 and 1.0</xs:documentation>
+ </xs:annotation>
+ <xs:restriction base="xs:decimal">
+ <xs:minExclusive value="0.0"/>
+ <xs:maxInclusive value="1.0"/>
+ </xs:restriction>
+</xs:simpleType>
+<xs:attributeGroup name="validityAttrs">
+ <xs:attribute name="validityPeriod" type="xs:duration">
+ <xs:annotation>
+ <xs:documentation>The period of time after receiving this document that it may no longer be
+valid.</xs:documentation>
+ </xs:annotation>
+ </xs:attribute>
+ <xs:attribute name="validUntil" type="mpeg7:timePointType">
+ <xs:annotation>
+ <xs:documentation>The absolute point in time after which this document may no longer be
+valid.</xs:documentation>
+ </xs:annotation>
+ </xs:attribute>
+</xs:attributeGroup>
+<xs:simpleType name="stringNoWhitespaceType">
+ <xs:restriction base="xs:string">
+ <xs:pattern value="[^\r\n\t \p{Z}]*"/>
+ </xs:restriction>
+</xs:simpleType>
+<xs:simpleType name="IPAddressType">
+ <xs:annotation>
+ <xs:documentation>TODO: Restrict this with a regular expression that matches IPv4 and IPv6 addresses
+in their respective textual notations.</xs:documentation>
+ </xs:annotation>
+ <xs:restriction base="xs:string"/>
+</xs:simpleType>
+<xs:simpleType name="PortNumberType">
+ <xs:restriction base="xs:positiveInteger">
+ <xs:maxInclusive value="65535"/>
+ </xs:restriction>
+</xs:simpleType>
+<xs:simpleType name="contentAcquisitionMethodType">
+ <xs:restriction base="xs:NMTOKEN">
+ <xs:enumeration value="push"/>
+ <xs:enumeration value="pull"/>
+ </xs:restriction>
+</xs:simpleType>
+<xs:simpleType name="transmissionModeType">
+ <xs:restriction base="xs:NMTOKEN">
+ <xs:enumeration value="resource"/>
+ <xs:enumeration value="chunked"/>
+ </xs:restriction>
+</xs:simpleType>
+<xs:simpleType name="transportSecurityType">
+ <xs:restriction base="xs:NMTOKEN">
+ <xs:enumeration value="none">
+ <xs:annotation>
+ <xs:documentation/>
+ </xs:annotation>
+ </xs:enumeration>
+ <xs:enumeration value="integrity">
+ <xs:annotation>
+ <xs:documentation>A digest of the multicast transport object is present in the metadata
+describing it, enabling its integrity to be verified by the Multicast gateway.</xs:documentation>
+ </xs:annotation>
+ </xs:enumeration>
+ <xs:enumeration value="integrityAndAuthenticity">
+ <xs:annotation>
+ <xs:documentation>A digest of the multicast transport object is present in the metadata
+describing it, enabling its integrity to be verified by the Multicast gateway. A digital signature is also
+provided, enabling the authenticity of (key fields within) the multicast transport object metadata to be
+verified by the Multicast gateway.</xs:documentation>
+ </xs:annotation>
+ </xs:enumeration>
+ </xs:restriction>
+</xs:simpleType>
+<xs:complexType name="ServiceComponentIdentifierType" abstract="true">
+ <xs:attribute name="manifestIdRef" type="xs:NMTOKEN" use="required">
+ <xs:annotation>
+ <xs:documentation>A cross-reference to a PresentationManifestLocator element in the parent
+MulticastSession with a manifestId of the same value.</xs:documentation>
+ </xs:annotation>
+ </xs:attribute>
+</xs:complexType>
+<xs:complexType name="DASHComponentIdentifierType">
+ <xs:complexContent>
+ <xs:extension base="ServiceComponentIdentifierType">
+ <xs:attribute name="periodIdentifier" type="xs:string" use="required"/>
+ <xs:attribute name="adaptationSetIdentifier" type="xs:unsignedInt" use="required"/>
+ <xs:attribute name="representationIdentifier" type="stringNoWhitespaceType" use="required"/>
+ </xs:extension>
+ </xs:complexContent>
+</xs:complexType>
+<xs:complexType name="HLSComponentIdentifierType">
+ <xs:complexContent>
+ <xs:extension base="ServiceComponentIdentifierType">
+ <xs:attribute name="mediaPlaylistLocator" type="xs:anyURI" use="required"/>
+ </xs:extension>
+ </xs:complexContent>
+</xs:complexType>
+<xs:complexType name="GenericComponentIdentifierType">
+ <xs:complexContent>
+ <xs:extension base="ServiceComponentIdentifierType">
+ <xs:attribute name="componentIdentifier" type="xs:NMTOKEN" use="required"/>
+ </xs:extension>
+ </xs:complexContent>
+</xs:complexType>
+<xs:complexType name="MulticastTransportProtocolType">
+ <xs:attribute name="protocolIdentifier" type="mpeg7:termReferenceType" use="required"/>
+ <xs:attribute name="protocolVersion" type="xs:positiveInteger" use="required"/>
+</xs:complexType>
+<xs:complexType name="MulticastEndpointAddressType">
+ <xs:sequence>
+ <xs:element name="NetworkSourceAddress" type="IPAddressType"/>
+<xs:element name="NetworkDestinationGroupAddress" type="IPAddressType"/>
+ <xs:element name="TransportDestinationPort" type="PortNumberType"/>
+ <xs:element name="MediaTransportSessionIdentfier" type="xs:positiveInteger" minOccurs="0">
+ <xs:annotation>
+ <xs:documentation>Uniquely identifying the stream of packets in the multicast group that
+corresponds to this multicast transport session, e.g. the LCT Channel identifier. (Some multicast media
+transport protocols do not require this additional demultiplexing identifier.)</xs:documentation>
+ </xs:annotation>
+ </xs:element>
+ </xs:sequence>
+</xs:complexType>
+<xs:complexType name="BitRateType">
+ <xs:attribute name="average" type="xs:positiveInteger" use="optional"/>
+ <xs:attribute name="maximum" type="xs:positiveInteger" use="required"/>
+</xs:complexType>
+<xs:complexType name="ForwardErrorCorrectionParametersType">
+ <xs:annotation>
+ <xs:documentation>A set of parameters describing an Application Level Forward Error Correction
+configuration.</xs:documentation>
+ </xs:annotation>
+ <xs:sequence>
+ <xs:element name="SchemeIdentifier" type="mpeg7:termReferenceType">
+ <xs:annotation>
+ <xs:documentation>A term identifier from ForwardErrorCorrectionSchemeCS identifying the AL-FEC
+scheme in use.</xs:documentation>
+ </xs:annotation>
+ </xs:element>
+ <xs:element name="OverheadPercentage" type="xs:positiveInteger">
+ <xs:annotation>
+ <xs:documentation>The percentage AL-FEC overhead for the repair stream described by this set of
+Forward Error Correction parameters.</xs:documentation>
+ </xs:annotation>
+ </xs:element>
+ <xs:element name="EndpointAddress" type="MulticastEndpointAddressType" minOccurs="0"
+maxOccurs="unbounded">
+ <xs:annotation>
+ <xs:documentation>The endpoint address to which AL-FEC repair packets are transmitted. May be
+omitted in cases where AL-FEC is transmitted in band to the same endpoint address as the enclosing multicast
+transport session.</xs:documentation>
+ </xs:annotation>
+ </xs:element>
+ </xs:sequence>
+</xs:complexType>
+<xs:complexType name="WeightedURIType">
+ <xs:annotation>
+ <xs:documentation>A URI with an associated weighting attribute.</xs:documentation>
+ </xs:annotation>
+ <xs:simpleContent>
+ <xs:extension base="xs:anyURI">
+ <xs:attribute name="relativeWeight" type="xs:nonNegativeInteger" default="1"/>
+ </xs:extension>
+ </xs:simpleContent>
+</xs:complexType>
+<xs:complexType name="UnicastRepairParametersType">
+ <xs:annotation>
+ <xs:documentation>An element describing the parameters to be used by a Multicast gateway when
+performing unicast repair. One or more base paths may be specified here, each with an optional weighting. If the
+weighting is omitted, all base paths are assumed to have an equal weighting of 1.0.</xs:documentation>
+ </xs:annotation>
+ <xs:sequence>
+ <xs:element name="BaseURL" type="WeightedURIType" minOccurs="0" maxOccurs="unbounded"/>
+ </xs:sequence>
+ <xs:attribute name="transportObjectReceptionTimeout" type="xs:unsignedInt" use="required">
+ <xs:annotation>
+ <xs:documentation>The time (expressed in milliseconds) that a Multicast gateway should wait for a
+packet relating to a particular multicast transport object before it can assume that the object transmission is
+over, and commence object repair using Forward Error Correction or unicast patching
+procedures.</xs:documentation>
+ </xs:annotation>
+ </xs:attribute>
+ <xs:attribute name="fixedBackOffPeriod" type="xs:unsignedInt" default="0">
+ <xs:annotation>
+ <xs:documentation>The minimum number of milliseconds that the Multicast gateway shall back off
+after the mutlicast transport object timeout before attempting a unicast repair.</xs:documentation>
+ </xs:annotation>
+ </xs:attribute>
+ <xs:attribute name="randomBackOffPeriod" type="xs:unsignedInt" default="0">
+ <xs:annotation>
+ <xs:documentation>An additional period that the Multicast gateway shall wait after the fixed backoff period before attempting a unicast repair. It shall be a randomly selected number of milliseconds between
+zero and the value specified in this attribute. The Multicast gateway shall choose a different random back-off
+period for each multicast transport object.</xs:documentation>
+ </xs:annotation>
+ </xs:attribute>
+ <xs:attribute name="transportObjectBaseURI" type="xs:anyURI" use="optional">
+ <xs:annotation>
+ <xs:documentation>The base path of all multicast transport objects conveyed in this multicast
+transport session. This prefix string is substituated by the Multicast gateway with a unicast repair base path
+when performing unicast repair.</xs:documentation>
+ </xs:annotation>
+ </xs:attribute>
+</xs:complexType>
+<xs:complexType name="TypedLocatorType">
+ <xs:annotation>
+ <xs:documentation>A URL and accompanying MIME content type.</xs:documentation>
+ </xs:annotation>
+ <xs:simpleContent>
+ <xs:extension base="xs:anyURI">
+ <xs:attribute name="contentType" type="mpeg7:mimeType" use="required">
+ <xs:annotation>
+ <xs:documentation>The MIME content type of the resource pointed to by the content of this
+element.</xs:documentation>
+ </xs:annotation>
+ </xs:attribute>
+ </xs:extension>
+ </xs:simpleContent>
+</xs:complexType>
+<xs:complexType name="ReportingLocatorType">
+ <xs:simpleContent>
+ <xs:extension base="xs:anyURI">
+ <xs:attribute name="proportion" type="decimalFraction" default="1.0">
+ <xs:annotation>
+ <xs:documentation>The proportion of Multicast gateways that should send reports to the
+specified endpoint. At the start of a multicast transport session, each Multicast gateway shall randomly decide
+whether or not to send reports based on this value.</xs:documentation>
+ </xs:annotation>
+ </xs:attribute>
+ <xs:attribute name="period" type="xs:duration" use="required">
+ <xs:annotation>
+ <xs:documentation>The period of time for the Multicast gateway to wait between sending
+reports to the specified endpoint.</xs:documentation>
+ </xs:annotation>
+ </xs:attribute>
+ <xs:attribute name="randomDelay" type="xs:unsignedInt" use="required">
+ <xs:annotation>
+ <xs:documentation>An additional period that the Multicast gateway shall delay when sending
+reports to the specified endpoint. It shall be a randomly selected number of milliseconds between zero and the
+value specified in this attribute. The Multicast gateway shall choose a different random delay for each report
+it sends.</xs:documentation>
+ </xs:annotation>
+ </xs:attribute>
+ </xs:extension>
+ </xs:simpleContent>
+</xs:complexType>
+<xs:complexType name="SessionReportingType">
+ <xs:sequence>
+ <xs:annotation>
+ <xs:documentation>Parameters used by the Multicast gateway to report statistics about the
+session.</xs:documentation>
+ </xs:annotation>
+ <xs:element name="ReportingLocator" type="ReportingLocatorType" maxOccurs="unbounded"/>
+ </xs:sequence>
+</xs:complexType>
+<xs:complexType name="BaseMulticastTransportSessionType">
+ <xs:sequence>
+ <xs:element name="TransportProtocol" type="MulticastTransportProtocolType"/>
+ <xs:element name="EndpointAddress" type="MulticastEndpointAddressType" maxOccurs="unbounded"/>
+ <xs:element name="BitRate" type="BitRateType"/>
+ <xs:element name="ForwardErrorCorrectionParameters" type="ForwardErrorCorrectionParametersType"
+minOccurs="0" maxOccurs="unbounded"/>
+ <xs:element name="UnicastRepairParameters" type="UnicastRepairParametersType" minOccurs="0"/>
+ </xs:sequence>
+ <xs:attribute name="transportSecurity" type="transportSecurityType" default="none">
+ <xs:annotation>
+ <xs:documentation>Controls whether the Multicast server adds integrity and/or authenticity metadata
+to multicast transport objects. Informs the Multicast gateway whether this metadata should be present and
+verified.</xs:documentation>
+ </xs:annotation>
+ </xs:attribute>
+</xs:complexType>
+<xs:complexType name="MulticastTransportSessionType">
+ <xs:complexContent>
+ <xs:extension base="BaseMulticastTransportSessionType">
+ <xs:sequence>
+ <xs:element name="ServiceComponentIdentifier" type="ServiceComponentIdentifierType"
+maxOccurs="unbounded">
+ <xs:annotation>
+ <xs:documentation>A means of referencing a single component of the linear
+service.</xs:documentation>
+ </xs:annotation>
+ </xs:element>
+ </xs:sequence>
+ <xs:attribute name="id" type="xs:NMTOKEN" use="required"/>
+ <xs:attribute name="start" type="mpeg7:timePointType" use="optional"/>
+ <xs:attribute name="duration" type="xs:duration" use="optional"/>
+ <xs:attribute name="contentIngestMethod" type="contentAcquisitionMethodType" default="pull">
+ <xs:annotation>
+ <xs:documentation>Used by the Multicast server to determine whether to pull content for this
+service component, or expect it to be pushed.</xs:documentation>
+ </xs:annotation>
+ </xs:attribute>
+ <xs:attribute name="transmissionMode" type="transmissionModeType" default="resource">
+ <xs:annotation>
+ <xs:documentation>Used by the Multicast server to determine the multicast transmission mode.
+In "resource" mode, the Multicast server waits until it has acquired a complete resource before attempting to
+transmit it as a multicast transport object. In "chunked" mode, the Multicast server maps a single acquired
+chunk to a different multicast transport object.</xs:documentation>
+ </xs:annotation>
+ </xs:attribute>
+ <xs:attribute name="sessionIdleTimeout" type="xs:positiveInteger" use="required">
+ <xs:annotation>
+ <xs:documentation>The time (expressed in milliseconds) that a Multicast gateway should wait
+for any packet on this multicast transport session before it can assume that the session is over and unsubscribe
+from the corresponding multicast group. If this attribute is omitted, reception of the multicast session never
+times out due to a lack of packets, but is still bounded by the transport session duration.</xs:documentation>
+ </xs:annotation>
+ </xs:attribute>
+ </xs:extension>
+ </xs:complexContent>
+</xs:complexType>
+<xs:complexType name="MulticastSessionType">
+ <xs:annotation>
+ <xs:documentation>All the multicast transport sessions required to deliver a single linear service
+according to operational needs.</xs:documentation>
+ </xs:annotation>
+ <xs:sequence>
+ <xs:element name="PresentationManifestLocator" maxOccurs="unbounded">
+ <xs:annotation>
+ <xs:documentation>The URL of a presentation manifest hosted on an origin server accessible to
+the system receiving this multicast session configuration.</xs:documentation>
+ </xs:annotation>
+ <xs:complexType>
+ <xs:simpleContent>
+ <xs:extension base="TypedLocatorType">
+ <xs:attribute name="manifestId" type="xs:NMTOKEN" use="required">
+ <xs:annotation>
+ <xs:documentation>An opaque identifier, unique within the lexical scope of this
+instance document, that identifies this XML element and allows it to be cross-referenced from elsewhere in the
+same instance document.</xs:documentation>
+ </xs:annotation>
+ </xs:attribute>
+ </xs:extension>
+ </xs:simpleContent>
+ </xs:complexType>
+ </xs:element>
+ <xs:element name="MulticastGatewaySessionReporting" type="SessionReportingType" minOccurs="0">
+ <xs:annotation>
+ <xs:documentation>The reporting destination(s) used by the Multicast gateway for all Multicast
+transport sessions within the scope of this Multicast session.</xs:documentation>
+ </xs:annotation>
+ </xs:element>
+ <xs:element name="MulticastTransportSession" type="MulticastTransportSessionType"
+maxOccurs="unbounded"/>
+ </xs:sequence>
+ <xs:attribute name="serviceIdentifier" type="xs:anyURI" use="required">
+ <xs:annotation>
+ <xs:documentation>A URI that uniquely identifies a multicast session within the deployed
+system.</xs:documentation>
+ </xs:annotation>
+ </xs:attribute>
+ <xs:attribute name="contentPlaybackAvailabilityOffset" type="xs:duration" default="PT0S">
+ <xs:annotation>
+ <xs:documentation>The period for which the availability start time of media objects delivered at
+reference point L should be delayed by the Multicast gateway</xs:documentation>
+ </xs:annotation>
+ </xs:attribute>
+</xs:complexType>
+<xs:element name="MulticastServerConfiguration">
+ <xs:annotation>
+ <xs:documentation>A document describing the currently configured Multicast sessions of a Multicast
+server.</xs:documentation>
+ </xs:annotation>
+ <xs:complexType>
+ <xs:sequence>
+ <xs:element name="MulticastGatewayConfigurationTransportSession"
+type="BaseMulticastTransportSessionType" minOccurs="0" maxOccurs="unbounded">
+ <xs:annotation>
+ <xs:documentation>The Multicast gateway configuration can optionally be transmitted via an
+in-band multicast transport session.</xs:documentation>
+ </xs:annotation>
+ </xs:element>
+ <xs:element name="MulticastSession" type="MulticastSessionType" minOccurs="0"
+maxOccurs="unbounded">
+ <xs:annotation>
+ <xs:documentation>A set of multicast sessions, each one for a different linear
+service.</xs:documentation>
+ </xs:annotation>
+ </xs:element>
+ </xs:sequence>
+ <xs:attributeGroup ref="validityAttrs">
+ <xs:annotation>
+ <xs:documentation>Attributes declaring the validity of this Multicast server configuration
+document and its contents.</xs:documentation>
+ </xs:annotation>
+ </xs:attributeGroup>
+ </xs:complexType>
+</xs:element>
+<xs:element name="MulticastGatewayConfiguration">
+ <xs:annotation>
+ <xs:documentation>A document describing the currently configured Multicast sessions of a Multicast
+gateway.</xs:documentation>
+ </xs:annotation>
+ <xs:complexType>
+ <xs:choice>
+ <xs:element name="MulticastGatewayConfigurationTransportSession"
+type="BaseMulticastTransportSessionType" minOccurs="0" maxOccurs="unbounded">
+ <xs:annotation>
+ <xs:documentation>The Multicast gateway configuration can optionally be transmitted via an
+in-band multicast transport session.</xs:documentation>
+ </xs:annotation>
+ </xs:element>
+ <xs:element name="MulticastSession" type="MulticastSessionType" minOccurs="0"
+maxOccurs="unbounded">
+ <xs:annotation>
+ <xs:documentation>A set of multicast sessions, each one for a different linear
+service.</xs:documentation>
+ </xs:annotation>
+ </xs:element>
+ </xs:choice>
+ <xs:attributeGroup ref="validityAttrs">
+ <xs:annotation>
+ <xs:documentation>Attributes declaring the validity of this Multicast gateway configuration
+document and its contents.</xs:documentation>
+ </xs:annotation>
+ </xs:attributeGroup>
+ </xs:complexType>
+</xs:element>
+</xs:schema>
+

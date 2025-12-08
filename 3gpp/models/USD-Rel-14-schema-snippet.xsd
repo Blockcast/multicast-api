@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns="urn:3GPP:metadata:2017:MBMS:userServiceDescription"
+           xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="urn:3GPP:metadata:2017:MBMS:userServiceDescription"
+           elementFormDefault="qualified" version="1">
+    <xs:attribute name="romService" type="xs:boolean" default="false"/>
+</xs:schema>

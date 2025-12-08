@@ -1,0 +1,22 @@
+
+<?xml version="1.0" encoding="UTF-8"?>
+<receptionReport xmlns="urn:3gpp:metadata:2008:MBMS:receptionreport"
+                 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="urn:3gpp:metadata:2008:MBMS:receptionreport receptionreport.xsd"> <receptionAcknowledgement> <fileURI>http://www.example.com/mbms-files/file1.3gp</fileURI> <fileURI>http://www.example.com/mbms-files/file2.3gp</fileURI> <fileURI>http://www.example.com/mbms-files/file4.3gp</fileURI> </receptionAcknowledgement>
+</receptionReport>
+<receptionReport xmlns="urn:3gpp:metadata:2008:MBMS:receptionreport"
+                 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="urn:3gpp:metadata:2008:MBMS:receptionreport receptionreport.xsd"> <statisticalReport
+        clientId="clientID"
+        sessionType="streaming"
+        serviceURI="bmsc.example.com"
+        serviceId="serviceID">
+    <qoeMetrics
+            numberOfRebufferingEvents="0 1 0" initialBufferingDuration="3.213" totalRebufferingDuration="0 1.23 0"
+            contentAccessTime="2.621" sessionStartTime="3428397714" sessionStopTime="3428397741"
+            networkResourceCellId="240012AF134EA = 240012AF1325E">
+        <medialevel_qoeMetrics sessionId="10.50.65.30:5050" framerateDeviation="0.345 0.250 0.123" t="false"
+                               numberOfSuccessiveLossEvents="5 0 3" numberOfCorruptionEvents="6 5 2" numberOfJitterEvents="0 1 0" totalCorruptionDuration="152 234 147" totalNumberofSuccessivePacketLoss="25 0 6" numberOfReceivedPackets="456 500 478" codecInfo="H263-2000/90000 = ="
+                               codecProfileLevel="profile=0;level=45 = ="
+                               codecImageSize="176x144 = =" averageCodecBitRate="124.5 128.0 115.1"
+                               totalJitterDuration="0 0.346 0"/> </qoeMetrics>
+</statisticalReport>
+</receptionReport>
