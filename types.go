@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"reflect"
 
-	gsma "github.com/blockcast/multicast/api/3gpp/models"
-	dvb "github.com/blockcast/multicast/api/dvb/models"
+	gsma "github.com/Blockcast/multicast-api/3gpp/models"
+	dvb "github.com/Blockcast/multicast-api/dvb/models"
 	"github.com/lib/pq"
 )
 

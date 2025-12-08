@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	dvb "github.com/blockcast/multicast/api/dvb/models"
+	dvb "github.com/Blockcast/multicast-api/dvb/models"
 	"github.com/lib/pq"
 )
 
