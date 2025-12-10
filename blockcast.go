@@ -1,4 +1,4 @@
-package multicast
+package api
 
 import "encoding/xml"
 
