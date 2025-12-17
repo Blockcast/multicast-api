@@ -2,6 +2,49 @@ package api
 
 import "encoding/xml"
 
+// FState represents the state of a file in the multicast transport
+type FState int32
+
+const (
+	NOTWANTED FState = iota
+	CLOSED
+	SENDING
+	WANTED
+	NEEDSREPAIR
+	RECEIVING
+	REPAIRING
+	ERROR
+	FINISHED
+	PUSHED
+)
+
+func (s FState) String() string {
+	switch s {
+	case NOTWANTED:
+		return "NOTWANTED"
+	case SENDING:
+		return "SENDING"
+	case WANTED:
+		return "WANTED"
+	case RECEIVING:
+		return "RECEIVING"
+	case REPAIRING:
+		return "REPAIRING"
+	case NEEDSREPAIR:
+		return "NEEDSREPAIR"
+	case ERROR:
+		return "ERROR"
+	case FINISHED:
+		return "FINISHED"
+	case PUSHED:
+		return "PUSHED"
+	case CLOSED:
+		return "CLOSED"
+	default:
+		return "UNKNOWN"
+	}
+}
+
 // BlockcastReceptionReport represents a reception report for Blockcast multicast sessions
 // It extends the standard 3GPP reception report format with Blockcast-specific extensions
 type BlockcastReceptionReport struct {
@@ -42,4 +85,20 @@ type BlockcastStatisticalReport struct {
 	RcvErrBytes uint64 `xml:"urn:blockcast:metadata:2024:MBMS:extensions rcvErrBytes,attr,omitempty" json:"rcvErrBytes,omitempty" db:"rcv_err_bytes"`
 	DupErrCount uint64 `xml:"urn:blockcast:metadata:2024:MBMS:extensions dupErrCount,attr,omitempty" json:"dupErrCount,omitempty" db:"dup_err_count"`
 	DupErrBytes uint64 `xml:"urn:blockcast:metadata:2024:MBMS:extensions dupErrBytes,attr,omitempty" json:"dupErrBytes,omitempty" db:"dup_err_bytes"`
+
+	// Rate and file information
+	RcvRate  float64            `xml:"urn:blockcast:metadata:2024:MBMS:extensions rcvRate,attr,omitempty" json:"rcvRate,omitempty" db:"rcv_rate"`
+	FileURIs []BlockcastFileURI `xml:"fileURI,omitempty" json:"fileURIs,omitempty" db:"file_uris"`
+}
+
+// BlockcastFileURI represents information about a single file in the reception report
+type BlockcastFileURI struct {
+	URI              string `xml:",chardata" json:"uri"`
+	ReceptionSuccess *bool  `xml:"receptionSuccess,attr,omitempty"`
+
+	// Custom Blockcast extensions
+	TOI            uint64 `xml:"urn:blockcast:metadata:2024:MBMS:extensions toi,attr,omitempty" json:"toi,omitempty"`
+	RangeReceived  string `xml:"urn:blockcast:metadata:2024:MBMS:extensions rangeReceived,attr,omitempty" json:"rangeReceived,omitempty"`
+	TransferLength uint64 `xml:"urn:blockcast:metadata:2024:MBMS:extensions transferLength,attr,omitempty" json:"transferLength,omitempty"`
+	FileState      FState `xml:"urn:blockcast:metadata:2024:MBMS:extensions fileState,attr,omitempty" json:"fileState,omitempty"`
 }
