@@ -150,4 +150,7 @@ type AMTRelayConfig struct {
 	Address string   `json:"address"`
 	Port    uint16   `json:"port"`
 	Timeout Duration `json:"timeout"`
+
+	// DRIAD (RFC 8777) - enable automatic relay discovery via DNS
+	UseDRIAD bool `json:"useDriad,omitempty"`
 }
