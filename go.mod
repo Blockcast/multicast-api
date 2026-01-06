@@ -1,4 +1,4 @@
-module github.com/Blockcast/multicast-api
+module github.com/blockcast/multicast-api
 
 go 1.25.4
 

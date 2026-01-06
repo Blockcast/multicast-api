@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	dvb "github.com/Blockcast/multicast-api/dvb/models"
+	dvb "github.com/blockcast/multicast-api/dvb/models"
 	"github.com/lib/pq"
 )
 
@@ -357,6 +357,3 @@ func (s FECEncoding) String() string {
 }
 
 type CodePoint uint8
-
-
-

@@ -2,8 +2,6 @@ package fec_test
 
 import (
 	"fmt"
-	"github.com/Blockcast/multicast-api/fec"
-	"github.com/stretchr/testify/assert"
 	"math"
 	"math/rand"
 	"net/url"
@@ -11,6 +9,9 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/blockcast/multicast-api/fec"
+	"github.com/stretchr/testify/assert"
 )
 
 var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
