@@ -1,9 +1,9 @@
 module github.com/blockcast/multicast-api
 
-go 1.23
+go 1.25.6
 
 require (
-	github.com/lib/pq v1.10.9
+	github.com/lib/pq v1.11.1
 	github.com/linkdata/deadlock v0.5.5
 	github.com/puzpuzpuz/xsync/v3 v3.5.1
 	github.com/stretchr/testify v1.11.1
@@ -12,7 +12,7 @@ require (
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/petermattis/goid v0.0.0-20250813065127-a731cc31b4fe // indirect
+	github.com/petermattis/goid v0.0.0-20260113132338-7c7de50cc741 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
