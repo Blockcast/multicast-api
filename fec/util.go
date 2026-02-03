@@ -3,7 +3,9 @@ package fec
 import (
 	"bufio"
 	"bytes"
+	"database/sql/driver"
 	"encoding/base64"
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"go/token"
@@ -138,6 +140,32 @@ func (r Range) MarshalText() ([]byte, error) {
 	return []byte(s), nil
 }
 
+// MarshalJSON implements json.Marshaler to produce proper JSON object output.
+// This overrides the default behavior where json.Marshal would use MarshalText.
+func (r Range) MarshalJSON() ([]byte, error) {
+	type rangeJSON struct {
+		Start int64 `json:"start"`
+		End   int64 `json:"end"`
+	}
+	return json.Marshal(rangeJSON{Start: r.Start, End: r.End})
+}
+
+// UnmarshalJSON implements json.Unmarshaler to parse JSON object format.
+// This overrides the default behavior where json.Unmarshal would use UnmarshalText.
+func (r *Range) UnmarshalJSON(data []byte) error {
+	type rangeJSON struct {
+		Start int64 `json:"start"`
+		End   int64 `json:"end"`
+	}
+	var rj rangeJSON
+	if err := json.Unmarshal(data, &rj); err != nil {
+		return err
+	}
+	r.Start = rj.Start
+	r.End = rj.End
+	return nil
+}
+
 func (r Range) String() string {
 	s := fmt.Sprintf("%d", r.Start)
 	if r.Start == r.End {
@@ -205,6 +233,26 @@ type RangeList []Range
 
 func (rl RangeList) MarshalXMLAttr(name xml.Name) (xml.Attr, error) {
 	return xml.Attr{Name: name, Value: rl.String()}, nil
+}
+
+func (rl RangeList) MarshalJSON() ([]byte, error) {
+	if rl == nil {
+		return []byte("null"), nil
+	}
+	return json.Marshal([]Range(rl))
+}
+
+func (rl *RangeList) UnmarshalJSON(data []byte) error {
+	if string(data) == "null" {
+		*rl = nil
+		return nil
+	}
+	var items []Range
+	if err := json.Unmarshal(data, &items); err != nil {
+		return err
+	}
+	*rl = RangeList(items)
+	return nil
 }
 
 func (rl RangeList) Count() int64 {
@@ -556,6 +604,85 @@ func flatten(rl RangeList) RangeList {
 }
 
 type ESIRange map[uint32]RangeList
+
+func (er ESIRange) MarshalJSON() ([]byte, error) {
+	if er == nil {
+		return []byte("null"), nil
+	}
+	m := make(map[string]RangeList, len(er))
+	for k, v := range er {
+		m[strconv.FormatUint(uint64(k), 10)] = v
+	}
+	return json.Marshal(m)
+}
+
+func (er *ESIRange) UnmarshalJSON(data []byte) error {
+	if string(data) == "null" {
+		*er = nil
+		return nil
+	}
+	var m map[string]RangeList
+	if err := json.Unmarshal(data, &m); err != nil {
+		return err
+	}
+	*er = make(ESIRange, len(m))
+	for k, v := range m {
+		sbn, err := strconv.ParseUint(k, 10, 32)
+		if err != nil {
+			return fmt.Errorf("invalid SBN key %q: %w", k, err)
+		}
+		(*er)[uint32(sbn)] = v
+	}
+	return nil
+}
+
+func (er ESIRange) Value() (driver.Value, error) {
+	if er == nil {
+		return nil, nil
+	}
+	return er.MarshalJSON()
+}
+
+func (er *ESIRange) Scan(value interface{}) error {
+	if value == nil {
+		*er = nil
+		return nil
+	}
+
+	var data []byte
+	switch v := value.(type) {
+	case []byte:
+		data = v
+	case string:
+		data = []byte(v)
+	default:
+		return fmt.Errorf("cannot scan type %T into ESIRange", value)
+	}
+
+	if len(data) == 0 {
+		*er = nil
+		return nil
+	}
+
+	data = bytes.TrimSpace(data)
+
+	s := string(data)
+	if s == "null" || s == "\"\"" || s == "{}" || s == "" {
+		*er = nil
+		return nil
+	}
+
+	if data[0] == '{' {
+		result := make(ESIRange)
+		if err := json.Unmarshal(data, &result); err == nil {
+			*er = result
+			return nil
+		}
+	}
+
+	*er = make(ESIRange)
+	return er.UnmarshalText(data)
+}
 
 func NewESIRange(sbnRange map[uint32]RangeList) *ESIRange {
 	return (*ESIRange)(&sbnRange)
