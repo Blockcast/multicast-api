@@ -1,3 +1,5 @@
+//go:build !tinygo
+
 package api
 
 import (
@@ -292,22 +294,8 @@ func (t BitRateType) Value() (driver.Value, error) {
 	return fmt.Sprintf("(%d,%d)", t.Average, t.Maximum), nil
 }
 
-type FECInstance uint16
-type FECEncoding uint8
-
-const (
-	ReedSolomonFECInst FECInstance = 0 // Reed-Solomon instance id, when Small Block Systematic FEC scheme is used
-
-	// Fully specified
-	COM_NO_C_FEC_ENC_ID FECEncoding = 0 // Compact No-Code FEC scheme
-	RS_GEN_FEC_ENC_ID   FECEncoding = 2 // Reed-Solomon FEC scheme RFC5510, over GF(2^^m) where m=8 or 16
-	RS_GF8_FEC_ENC_ID   FECEncoding = 5 // Reed-Solomon FEC scheme RFC5510, over GF(2^^8)
-	RAPTORQ_FEC_ENC_ID  FECEncoding = 6 // RaptorQ FEC scheme RFC6330
-	//Underspecified    common.FECEncoding
-	SB_LB_E_FEC_ENC_ID FECEncoding = 128 // Small Block, Large Block and Expandable FEC scheme
-	SB_SYS_FEC_ENC_ID  FECEncoding = 129 // Small Block Systematic FEC scheme
-	COM_FEC_ENC_ID     FECEncoding = 130 // Compact FEC scheme
-)
+// FECInstance, FECEncoding, CodePoint types and FEC constants are in fec_types.go
+// (no build tag) for TinyGo compatibility.
 
 func (s *FECEncoding) Scan(src any) error {
 	switch src := src.(type) {
@@ -330,30 +318,4 @@ func (s *FECEncoding) Value() (driver.Value, error) {
 }
 
 // GormDBDataType and Int64Value removed to avoid GORM/PGX dependency
-
-func (d FECEncoding) NamedEnum() ([]interface{}, []string) {
-	return []interface{}{
-			COM_NO_C_FEC_ENC_ID,
-			RS_GF8_FEC_ENC_ID,
-			RAPTORQ_FEC_ENC_ID},
-		[]string{
-			"Compact-No-Code",
-			"Reed-Solomon-GF(2^^8)",
-			"RaptorQ",
-		}
-}
-
-func (s FECEncoding) String() string {
-	switch s {
-	case COM_NO_C_FEC_ENC_ID:
-		return "Compact-No-Code"
-	case RS_GF8_FEC_ENC_ID:
-		return "Reed-Solomon-GF(2^^8)"
-	case RAPTORQ_FEC_ENC_ID:
-		return "RaptorQ"
-	default:
-		return "unknown"
-	}
-}
-
-type CodePoint uint8
+// FECEncoding.NamedEnum(), FECEncoding.String() moved to fec_types.go
