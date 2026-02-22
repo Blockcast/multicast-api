@@ -15,10 +15,6 @@ type DeliveryMethod struct {
 	// Transport specifies the delivery transport type (http, moq, mahp, mmt)
 	// See TransportType for available options
 	Transport *TransportType `json:"transport,omitempty" db:"transport_type"`
-	// Endpoint is the delivery endpoint URL or address
-	// For http/moq: https://host:port/path
-	// For mahp/mmt: ssm://source@group:port
-	Endpoint *string `json:"endpoint,omitempty" db:"endpoint"`
 
 	AccessGroup uint8  `json:"access_group" db:"access_group"`
 	Interface   string `json:"interface" db:"interface"`
