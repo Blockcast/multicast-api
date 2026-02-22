@@ -10,10 +10,11 @@ type TransportProtocolType string
 const (
 	FLUTE TransportProtocolType = "FLUTE"
 	ROUTE TransportProtocolType = "ROUTE"
+	MOQ   TransportProtocolType = "MOQ"
 )
 
 func (d TransportProtocolType) Enum() []interface{} {
-	return []interface{}{FLUTE, ROUTE}
+	return []interface{}{FLUTE, ROUTE, MOQ}
 }
 
 // TransportType defines the delivery method transport types (MBMS model)

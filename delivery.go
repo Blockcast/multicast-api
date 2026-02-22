@@ -12,10 +12,6 @@ import (
 )
 
 type DeliveryMethod struct {
-	// Transport specifies the delivery transport type (http, moq, mahp, mmt)
-	// See TransportType for available options
-	Transport *TransportType `json:"transport,omitempty" db:"transport_type"`
-
 	AccessGroup uint8  `json:"access_group" db:"access_group"`
 	Interface   string `json:"interface" db:"interface"`
 	MTU         int    `json:"mtu" db:"mtu"`
