@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -36,6 +37,17 @@ func (t TimeZ) MarshalJSON() ([]byte, error) {
 }
 
 func (t *TimeZ) UnmarshalJSON(b []byte) error {
+	// Trim surrounding double-quotes if present (JSON string form). Raw XML
+	// attr values passed through UnmarshalXMLAttr arrive unquoted.
+	s := strings.TrimSpace(string(b))
+	s = strings.TrimPrefix(s, `"`)
+	s = strings.TrimSuffix(s, `"`)
+	// Accept Unix timestamp per ATSC A/331 §3.2.1 (FDT-Instance@Expires is
+	// xs:nonNegativeInteger seconds since epoch).
+	if unix, err := strconv.ParseInt(s, 10, 64); err == nil {
+		*t = TimeZ(time.Unix(unix, 0).UTC())
+		return nil
+	}
 	layouts := []string{
 		RFC3339Z,
 		time.RFC3339,
@@ -44,13 +56,16 @@ func (t *TimeZ) UnmarshalJSON(b []byte) error {
 		// Add other layouts as needed
 	}
 	for _, layout := range layouts {
-		v, err := time.Parse(layout, string(b))
+		v, err := time.Parse(layout, s)
 		if err == nil {
 			*t = TimeZ(v)
 			return nil
 		}
 	}
-	err := (*time.Time)(t).UnmarshalJSON(b)
+	// Fall back to time.Time's UnmarshalJSON for standards like RFC 3339
+	// with sub-second precision that our layouts miss. It requires a
+	// JSON-quoted input, so re-quote.
+	err := (*time.Time)(t).UnmarshalJSON([]byte(`"` + s + `"`))
 	if err != nil {
 		return fmt.Errorf("%w: %s", err, b)
 	}
