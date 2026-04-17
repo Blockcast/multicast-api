@@ -43,10 +43,16 @@ func (t *TimeZ) UnmarshalJSON(b []byte) error {
 	s = strings.TrimPrefix(s, `"`)
 	s = strings.TrimSuffix(s, `"`)
 	// Accept Unix timestamp per ATSC A/331 §3.2.1 (FDT-Instance@Expires is
-	// xs:nonNegativeInteger seconds since epoch).
-	if unix, err := strconv.ParseInt(s, 10, 64); err == nil {
-		*t = TimeZ(time.Unix(unix, 0).UTC())
-		return nil
+	// xs:nonNegativeInteger seconds since epoch). Guard against greedy
+	// matches: only treat the input as Unix epoch if it is purely numeric
+	// (no date/time separators) AND the resulting time is on or after
+	// 2001-09-09 (10^9 seconds), ruling out pre-Unix-era-looking values
+	// like "20260417" being parsed as 1970-08-23.
+	if !strings.ContainsAny(s, "-:T ") {
+		if unix, err := strconv.ParseInt(s, 10, 64); err == nil && unix >= 1_000_000_000 {
+			*t = TimeZ(time.Unix(unix, 0).UTC())
+			return nil
+		}
 	}
 	layouts := []string{
 		RFC3339Z,
