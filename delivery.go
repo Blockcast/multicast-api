@@ -313,8 +313,8 @@ func (s *FECEncoding) Scan(src any) error {
 	}
 	return fmt.Errorf("scan invalid type: %T", src)
 }
-func (s *FECEncoding) Value() (driver.Value, error) {
-	return strconv.FormatInt(int64(*s), 10), nil
+func (s FECEncoding) Value() (driver.Value, error) {
+	return strconv.FormatInt(int64(s), 10), nil
 }
 
 // GormDBDataType and Int64Value removed to avoid GORM/PGX dependency
