@@ -1,9 +1,6 @@
-//go:build !tinygo
-
 package api
 
 import (
-	"database/sql/driver"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
@@ -97,9 +94,6 @@ func (t *TimeZ) Scan(src interface{}) error {
 	return t.UnmarshalJSON(in)
 }
 
-func (t TimeZ) Value() (driver.Value, error) {
-	return time.Time(t).UTC(), nil
-}
 func (t *TimeZ) UnmarshalXMLAttr(attr xml.Attr) error {
 	return t.UnmarshalJSON([]byte(attr.Value))
 }
@@ -109,10 +103,6 @@ func (t TimeZ) Sub(o TimeZ) time.Duration {
 }
 
 type Duration time.Duration
-
-func (d Duration) Value() (driver.Value, error) {
-	return d.String(), nil
-}
 
 func (d Duration) String() string {
 	return time.Duration(d).String()
@@ -281,12 +271,6 @@ type RRuleSet struct {
 	Exdate []TimeZ `json:"exdate,omitempty"`
 }
 
-// Make the Attrs struct implement the driver.Valuer interface. This method
-// simply returns the JSON-encoded representation of the struct.
-func (a RRuleSet) Value() (driver.Value, error) {
-	return json.Marshal(a)
-}
-
 // Make the Attrs struct implement the sql.Scanner interface. This method
 // simply decodes a JSON-encoded value into the struct fields.
 func (a *RRuleSet) Scan(value interface{}) error {
@@ -318,6 +302,3 @@ func (r RRuleSet) RRuleSet() (*rrule.Set, error) {
 	set.SetExDates(exdates)
 	return set, nil
 }
-
-
-
