@@ -1,9 +1,6 @@
-//go:build !tinygo
-
 package api
 
 import (
-	"database/sql/driver"
 	"encoding/xml"
 	sync "github.com/linkdata/deadlock"
 	"reflect"
@@ -224,9 +221,4 @@ func (i *AtomicUint32) UnmarshalXMLAttr(attr xml.Attr) error {
 	val, err := strconv.ParseUint(attr.Value, 10, 32)
 	i.Store(uint32(val))
 	return err
-}
-
-// Value implements the database/sql/driver Valuer interface.
-func (i *AtomicUint32) Value() (driver.Value, error) {
-	return i.Load(), nil
 }

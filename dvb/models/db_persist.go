@@ -1,3 +1,5 @@
+//go:build !wasm || persist
+
 package models
 
 import (
