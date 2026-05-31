@@ -4,11 +4,9 @@ package models
 
 import (
 	"bytes"
-	"database/sql/driver"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/xml"
-	"fmt"
 	"strconv"
 	"strings"
 )
@@ -879,26 +877,6 @@ type MediaTimeType struct {
 // Must match the pattern [!--[\(\)<>@,;:\\"/\[\]\?=]]+/[!--[\(\)<>@,;:\\"/\[\]\?=]]+
 type MimeType string
 
-func (m *MimeType) Scan(src interface{}) error {
-	if src == nil {
-		*m = ""
-		return nil
-	}
-	switch v := src.(type) {
-	case string:
-		*m = MimeType(v)
-	case []byte:
-		*m = MimeType(string(v))
-	default:
-		return fmt.Errorf("cannot scan %T into MimeType", src)
-	}
-	return nil
-}
-
-func (m MimeType) Value() (driver.Value, error) {
-	return string(m), nil
-}
-
 type Mpeg7BaseType struct {
 }
 
@@ -1125,76 +1103,6 @@ type PresentationManifestLocator struct {
 	Location    string   `xml:",chardata" db:"location" json:"location"`
 	ManifestId  string   `xml:"manifestId,attr" json:"manifestId" db:"manifestId"`
 	ContentType MimeType `xml:"contentType,attr" json:"contentType" db:"contentType"`
-}
-
-func (t *PresentationManifestLocator) Scan(src interface{}) error {
-	if src == nil {
-		return nil
-	}
-
-	// Handle scanning from text format (used in Postgres composite types)
-	switch v := src.(type) {
-	case string:
-		return t.scanFromString(v)
-	case []byte:
-		return t.scanFromString(string(v))
-	}
-
-	return fmt.Errorf("cannot scan %T into PresentationManifestLocator", src)
-}
-
-func (t *PresentationManifestLocator) scanFromString(src string) error {
-	// Parse PostgreSQL composite type format: (field1,field2,field3)
-	// Remove parentheses and split by comma, handling escaped commas
-	if len(src) < 2 || src[0] != '(' || src[len(src)-1] != ')' {
-		return fmt.Errorf("invalid format for PresentationManifestLocator: %s", src)
-	}
-
-	// Remove parentheses
-	src = src[1 : len(src)-1]
-
-	// Simple split - in a production system you'd want more robust parsing
-	parts := strings.SplitN(src, ",", 3)
-	if len(parts) != 3 {
-		return fmt.Errorf("expected 3 fields in PresentationManifestLocator, got %d", len(parts))
-	}
-
-	// Unquote strings if needed
-	t.Location = unquoteIfNeeded(parts[0])
-	t.ManifestId = unquoteIfNeeded(parts[1])
-	t.ContentType = MimeType(unquoteIfNeeded(parts[2]))
-
-	return nil
-}
-
-// Helper function to handle quoted values in PostgreSQL composite types
-func unquoteIfNeeded(s string) string {
-	s = strings.TrimSpace(s)
-	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
-		// Remove quotes and unescape any double quotes inside
-		s = s[1 : len(s)-1]
-		s = strings.ReplaceAll(s, "\"\"", "\"") // Postgres escapes quotes by doubling them
-	}
-	return s
-}
-
-func (t PresentationManifestLocator) Value() (driver.Value, error) {
-	// Format as PostgreSQL composite type
-	location := quoteIfNeeded(t.Location)
-	manifestId := quoteIfNeeded(t.ManifestId)
-	contentType := quoteIfNeeded(string(t.ContentType))
-
-	return fmt.Sprintf("(%s,%s,%s)", location, manifestId, contentType), nil
-}
-
-// Helper function to quote values for PostgreSQL composite types
-func quoteIfNeeded(s string) string {
-	// Quote values that contain special characters
-	if strings.ContainsAny(s, ", ()\"\\") {
-		s = strings.ReplaceAll(s, "\"", "\"\"") // Escape quotes
-		s = "\"" + s + "\""
-	}
-	return s
 }
 
 type ProbabilityVector []float64
