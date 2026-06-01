@@ -1,5 +1,3 @@
-//go:build !tinygo
-
 package api
 
 import (
@@ -16,4 +14,3 @@ type RWLocker interface {
 	TryRLock() (bool, *xsync.RToken)
 	TryLock() bool
 }
-
