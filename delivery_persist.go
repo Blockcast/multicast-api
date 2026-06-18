@@ -198,21 +198,40 @@ func (t BitRateType) Value() (driver.Value, error) {
 	return fmt.Sprintf("(%d,%d)", t.Average, t.Maximum), nil
 }
 
+// Scan implements database/sql.Scanner for FECEncoding.
+//
+// Postgres columns holding FEC encoding ids have historically used the numeric
+// form ("0", "5", "6"), but current writers may emit the named-enum form
+// ("Compact-No-Code", "Reed-Solomon-GF(2^^8)", "RaptorQ"). Accept both.
+//
+// Only the canonical enums returned by NamedEnum are reverse-looked-up.
+// String() returns "unknown" for non-canonical constants, so iterating every
+// declared constant would silently bind a literal "unknown" column value.
 func (s *FECEncoding) Scan(src any) error {
-	switch src := src.(type) {
+	var in string
+	switch v := src.(type) {
 	case []byte:
-		val, err := strconv.Atoi(string(src))
-		*s = FECEncoding(val)
-		return err
+		in = string(v)
 	case string:
-		val, err := strconv.Atoi(src)
-		*s = FECEncoding(val)
-		return err
+		in = v
 	case int64:
-		*s = FECEncoding(src)
+		*s = FECEncoding(v)
+		return nil
+	default:
+		return fmt.Errorf("scan invalid type: %T", src)
+	}
+	if n, err := strconv.Atoi(in); err == nil {
+		*s = FECEncoding(n)
 		return nil
 	}
-	return fmt.Errorf("scan invalid type: %T", src)
+	enums, names := FECEncoding(0).NamedEnum()
+	for i, name := range names {
+		if name == in {
+			*s = enums[i].(FECEncoding)
+			return nil
+		}
+	}
+	return fmt.Errorf("FECEncoding.Scan: unknown value %q", in)
 }
 func (s FECEncoding) Value() (driver.Value, error) {
 	return strconv.FormatInt(int64(s), 10), nil
