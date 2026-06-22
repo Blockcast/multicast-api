@@ -94,8 +94,17 @@ func (t *FECParamType) Scan(src interface{}) error {
 	}
 	t.NumEsPerGroup = uint32(val)
 
-	if len(x[6]) > 6 {
-		x[6] = "{" + x[6][3:len(x[6])-3] + "}"
+	// x[6] is the `endpoint multicast_endpoint[]` field of the composite. After
+	// the outer fec_params[] array unescapes one level, it arrives as a
+	// double-quoted PG composite field whose inner array quotes are doubled,
+	// e.g. `"{""(a,b,c,d)"",""(e,f,g,h)""}"`. Reverse that escaping — strip the
+	// field's surrounding quotes and un-double `""`->`"` — to recover a plain
+	// array literal `{"(a,b,c,d)","(e,f,g,h)"}` that GenericArray can parse.
+	// (The previous fixed-offset `x[6][3:len-3]` slice only produced valid
+	// output for a single endpoint; with >=2 it left the inter-element `"",""`
+	// doubled, so the read 500'd with `unable to parse array`.)
+	if len(x[6]) >= 2 && x[6][0] == '"' && x[6][len(x[6])-1] == '"' {
+		x[6] = strings.ReplaceAll(x[6][1:len(x[6])-1], `""`, `"`)
 	}
 
 	if err = (pq.GenericArray{A: &t.Endpoint}).Scan(x[6]); len(x[6]) > 0 && err != nil {
