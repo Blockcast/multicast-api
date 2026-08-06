@@ -44,7 +44,7 @@ func TestPackageImportsOnlyStdlib(t *testing.T) {
 	}
 
 	fset := token.NewFileSet()
-	checked := 0
+	production := 0
 	for _, entry := range entries {
 		name := entry.Name()
 		if entry.IsDir() || filepath.Ext(name) != ".go" {
@@ -54,7 +54,9 @@ func TestPackageImportsOnlyStdlib(t *testing.T) {
 		if err != nil {
 			t.Fatalf("parse %s: %v", name, err)
 		}
-		checked++
+		if !strings.HasSuffix(name, "_test.go") {
+			production++
+		}
 		for _, spec := range file.Imports {
 			path, err := strconv.Unquote(spec.Path.Value)
 			if err != nil {
@@ -72,9 +74,14 @@ func TestPackageImportsOnlyStdlib(t *testing.T) {
 		}
 	}
 
-	// Guard the guard: a rename or a build-tag mistake that hides every file
-	// would otherwise make this test vacuously pass.
-	if checked == 0 {
-		t.Fatal("no .go files found in package directory; this guard scanned nothing")
+	// Guard the guard. Counting every .go file would make this inert: this test
+	// file is itself a .go file in this directory, so the count can never reach
+	// zero while the test is running. Only NON-test files are counted, so the
+	// case that actually matters -- the production source being renamed, deleted,
+	// or excluded by a build tag, leaving the loop above with nothing real to
+	// inspect -- still fails loudly instead of passing vacuously.
+	if production == 0 {
+		t.Fatal("no non-test .go files in this package: the import scan above had no " +
+			"production source to check, so its silence means nothing")
 	}
 }
