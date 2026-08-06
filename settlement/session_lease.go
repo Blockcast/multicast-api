@@ -1,3 +1,25 @@
+// Package settlement defines the session-lease wire contract between the CDN
+// control plane and the multicast delivery edge.
+//
+// A supplier's gateway mints a signed SessionLease authorizing one multicast
+// delivery session; the edge verifies that lease before serving, and the
+// settlement rail later pays out against it. Because the minting side and the
+// verifying side are separate programs in separate repositories, this package
+// is the single definition both compile against -- it exists so the two can
+// never disagree about what a lease is.
+//
+// The three entry points:
+//
+//	SessionLeaseSigner.Issue    mint + sign a lease (control plane)
+//	SessionLeaseVerifier.Verify authenticate one (edge, on the delivery path)
+//	Encode/DecodeSessionLease   the transport encoding for both
+//
+// This package is deliberately stdlib-only. The multicast edge builds for
+// js/wasm, wasip1/wasm and TinyGo, and the rest of this module cannot: the root
+// package imports xsync, linkdata/deadlock, and lib/pq, the last of which
+// TinyGo will not compile. Go links per package, so this one stays reachable
+// from those targets as long as its imports stay stdlib. That is enforced by
+// TestPackageImportsOnlyStdlib rather than left to reviewer memory.
 package settlement
 
 import (
@@ -39,36 +61,112 @@ var (
 	ErrUnsupportedLeaseSignerKey = errors.New("settlement: unsupported session lease signing key")
 )
 
-// SessionLease is the signed v1 supplier-edge lease from BLO-17643 section 4.
+// SessionLease is the signed record authorizing one multicast delivery session,
+// and the unit the settlement rail pays out against.
+//
+// This is a wire contract with two independent implementations -- the minting
+// side in the control plane, the verifying side at the edge -- so the details
+// below are normative, not incidental. A field one side encodes differently is
+// a lease the other side rejects.
+//
+// # What the signature covers
+//
+// sessionLeaseDigest hashes a domain-separated preimage:
+//
+//	sha256( "blockcast:mvpn-settlement:v1:" + RecordKind + 0x00 + canonicalSessionLeaseJSON(lease) )
+//
+// The canonical JSON carries every field below EXCEPT RecordDigest and
+// Signature, emitted in lexicographic key order. The separator and RecordKind
+// prefix are what stop a lease digest from colliding with the digest of some
+// other blockcast record that happens to serialize the same way.
+//
+// # Timestamps are UNIX NANOSECONDS
+//
+// Not seconds, not milliseconds. They exceed 2^53 routinely, so any
+// implementation that round-trips them through an ECMAScript number corrupts
+// the preimage and fails every signature check. Preserve the integer encoding
+// exactly.
 type SessionLease struct {
-	RecordKind        string `json:"record_kind"`
+	// RecordKind is always "SessionLease". It is validated AND mixed into the
+	// digest prefix, so it is what prevents a lease from being reinterpreted as
+	// a different record type.
+	RecordKind string `json:"record_kind"`
+	// SettlementVersion is the settlement-rail version this lease is minted
+	// under. Signed, and Verify rejects anything but
+	// SessionLeaseSettlementVersion with ErrUnsupportedSettlement -- so a lease
+	// cannot be downgraded to an older rail's rules in flight.
 	SettlementVersion uint64 `json:"settlement_version"`
-	LeaseID           string `json:"lease_id"`
-	SupplierID        string `json:"supplier_id"`
-	GatewayID         string `json:"gateway_id"`
-	SID               string `json:"sid"`
-	Source            string `json:"source"`
-	Group             string `json:"group"`
-	RouteVersion      string `json:"route_version"`
-	LCUMHOrigin       string `json:"lc_umh_origin"`
-	IssuedAtNS        int64  `json:"issued_at_ns"`
-	NotBeforeNS       int64  `json:"not_before_ns"`
-	ExpiresAtNS       int64  `json:"expires_at_ns"`
-	LeaseNonce        string `json:"lease_nonce"`
-	MaxBeaconGapNS    int64  `json:"max_beacon_gap_ns"`
-	IssuerKeyID       string `json:"issuer_key_id"`
-	RecordDigest      string `json:"record_digest,omitempty"`
-	Signature         string `json:"signature,omitempty"`
+	// LeaseID uniquely identifies this lease. Required non-empty.
+	LeaseID string `json:"lease_id"`
+	// SupplierID and GatewayID name who issued the lease. Verify requires them
+	// to match the verification key registered for the signing certificate, so
+	// one gateway's key cannot sign in another's name.
+	SupplierID string `json:"supplier_id"`
+	GatewayID  string `json:"gateway_id"`
+	// SID is the opaque delivery-session identifier from the request.
+	SID string `json:"sid"`
+	// Source and Group are the multicast (S,G) this lease authorizes. Both must
+	// parse as IPs.
+	//
+	// Issue canonicalizes them through net.ParseIP(...).String() before signing,
+	// and the rate limiter keys on that same canonical form. Both halves matter:
+	// without them, "::1" and "0:0:0:0:0:0:0:1" are different strings for the
+	// same group, which once let a caller respell an address and get a second
+	// concurrent lease past the one-live-lease limiter.
+	Source string `json:"source"`
+	Group  string `json:"group"`
+	// RouteVersion is the routing-MI envelope version the session was set up
+	// under (api.CdnTransportMIVersion at the sender). Required non-empty.
+	RouteVersion string `json:"route_version"`
+	// LCUMHOrigin identifies the upstream multicast hop the traffic originates
+	// from, in practice an ASN-scoped triple such as "64512:1:3221225985". It is
+	// operator-supplied and OPAQUE to this package: signed and required to be
+	// non-empty printable ASCII, never parsed or interpreted here.
+	LCUMHOrigin string `json:"lc_umh_origin"`
+	// IssuedAtNS, NotBeforeNS and ExpiresAtNS bound validity, in Unix
+	// nanoseconds. Required: IssuedAtNS <= NotBeforeNS, and a lifetime of
+	// ExpiresAtNS-NotBeforeNS that is positive and at most
+	// SessionLeaseMaxLifetime. Verify judges the window against its own clock
+	// with SessionLeaseMaxClockSkew of tolerance, never against a
+	// caller-supplied time.
+	IssuedAtNS  int64 `json:"issued_at_ns"`
+	NotBeforeNS int64 `json:"not_before_ns"`
+	ExpiresAtNS int64 `json:"expires_at_ns"`
+	// LeaseNonce is exactly 32 random bytes, base64url without padding. It makes
+	// two leases with otherwise identical contents distinct records.
+	LeaseNonce string `json:"lease_nonce"`
+	// MaxBeaconGapNS is how long the edge may go without a liveness beacon
+	// before the session stops being billable. It is signed and pinned: Verify
+	// rejects any value other than SessionLeaseMaxBeaconGap, so a minter cannot
+	// widen its own billing window.
+	MaxBeaconGapNS int64 `json:"max_beacon_gap_ns"`
+	// IssuerKeyID selects the verification key. It is derived from the signing
+	// certificate's SPIFFE URI and public key, and is signed, so it cannot be
+	// pointed at a different key after minting.
+	IssuerKeyID string `json:"issuer_key_id"`
+	// RecordDigest and Signature carry the result of signing and are therefore
+	// NOT part of the preimage. Omitted while a lease is being built.
+	RecordDigest string `json:"record_digest,omitempty"`
+	Signature    string `json:"signature,omitempty"`
 }
 
+// SessionLeaseRequest is what a caller asks for. The signer supplies everything
+// else -- identity, timestamps, nonce, key ID -- so a caller cannot choose the
+// fields that decide who the lease belongs to or how long it lives beyond
+// SessionLeaseMaxLifetime.
 type SessionLeaseRequest struct {
 	SID          string
 	Source       string
 	Group        string
 	RouteVersion string
 	LCUMHOrigin  string
-	ClientIP     net.IP
-	Lifetime     time.Duration
+	// ClientIP is used only for rate-limiting scope; it is not part of the
+	// signed lease.
+	ClientIP net.IP
+	// Lifetime must be positive and at most SessionLeaseMaxLifetime. Issue
+	// rejects anything outside that range rather than silently shortening it,
+	// so a caller never believes it holds a longer lease than it does.
+	Lifetime time.Duration
 }
 
 type SessionLeaseSigner struct {
@@ -94,11 +192,25 @@ func (s *SessionLeaseSigner) entropy() io.Reader {
 	return rand.Reader
 }
 
+// SessionLeaseVerifier authenticates leases at the edge. Keys is the registry
+// of gateways it will accept, built by VerificationKey from each supplier
+// certificate; TrustDomain is the SPIFFE trust domain those certificates must
+// belong to. A verifier with no matching key entry rejects the lease -- there
+// is no fallback that trusts a lease's own claim about who signed it.
 type SessionLeaseVerifier struct {
 	TrustDomain string
 	Keys        map[string]SessionLeaseVerificationKey
 }
 
+// SessionLeaseVerificationKey is one registered gateway's identity and public
+// key, produced by SessionLeaseVerifier.VerificationKey.
+//
+// PublicKey is verifier-owned: VerificationKey deep-copies the curve
+// coordinates out of the caller's certificate rather than retaining its
+// pointer. Storing the caller's pointer made the immutability only skin-deep --
+// the caller still owned the key object, so overwriting X and Y after
+// registration left SupplierID, GatewayID and SPIFFEURI intact while Verify
+// began accepting leases signed by the replacement private key.
 type SessionLeaseVerificationKey struct {
 	SupplierID string
 	GatewayID  string
