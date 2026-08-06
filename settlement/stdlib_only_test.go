@@ -16,27 +16,36 @@ import (
 // SessionLease is the control-plane <-> edge wire contract: trafficcontrol
 // mints leases, the multicast edge verifies them on the CMSD delivery path.
 // It lives in multicast-api because that module is the one both sides already
-// depend on -- but multicast's edge also builds for js/wasm, wasip1/wasm, and
-// TinyGo, and the ROOT api package of this module cannot go there: locker.go
-// imports xsync, util.go imports linkdata/deadlock, and types_persist.go /
-// delivery_persist.go import lib/pq, which TinyGo cannot compile (the same
-// constraint delivery_wasm.go was written for).
+// depend on -- and it lives in its OWN package, stdlib-only, so the edge can
+// import it from js/wasm, wasip1/wasm and TinyGo in every build configuration.
 //
-// Go links per PACKAGE, not per module, so this package is reachable from a
-// TinyGo build precisely as long as its own imports stay stdlib. That is not a
-// property anyone can see by reading go.mod -- the module requirement lists pq
-// and friends either way. One convenience import here (a uuid helper, a
-// logging package, xsync for the limiter) silently un-builds the edge, and the
-// break would surface as a wasm build failure in a DIFFERENT repository, long
-// after the commit that caused it.
+// The root api package of this module reaches those targets too, but only
+// conditionally: its lib/pq-importing files (types_persist.go,
+// delivery_persist.go, ...) carry `//go:build !wasm || persist`, and
+// delivery_wasm.go substitutes when they drop out. Build it with `-tags
+// persist` -- the configuration multicast's IWA target uses -- and pq is back
+// in, and TinyGo fails on it outright. Measured, not assumed:
+//
+//	tinygo -target=wasm            root api pkg               exit 0
+//	tinygo -target=wasm -tags persist  root api pkg           exit 1  (lib/pq)
+//	tinygo -target=wasm -tags persist  this package           exit 0
+//
+// Go links per PACKAGE, not per module, so this package's reachability is a
+// property of its own imports -- and unlike the root package's, it holds under
+// every tag combination. That is not visible in go.mod, which lists pq either
+// way. One convenience import here (a uuid helper, a logging package, xsync for
+// the limiter) silently un-builds the edge, and the break would surface as a
+// wasm build failure in a DIFFERENT repository, long after the commit that
+// caused it.
 //
 // So: assert it here, hermetically, where the mistake would be made. This test
 // needs no toolchain, no network, and no CI -- which matters, because this
-// module currently has no CI workflows at all.
+// module's CI is a single workflow that could itself be removed.
 //
 // If you are here because this test failed: the fix is almost never to add the
 // import. Either keep the dependency in the caller, or move the code that
 // needs it into a package the edge does not import.
+
 func TestPackageImportsOnlyStdlib(t *testing.T) {
 	entries, err := os.ReadDir(".")
 	if err != nil {

@@ -14,12 +14,21 @@
 //	SessionLeaseVerifier.Verify authenticate one (edge, on the delivery path)
 //	Encode/DecodeSessionLease   the transport encoding for both
 //
-// This package is deliberately stdlib-only. The multicast edge builds for
-// js/wasm, wasip1/wasm and TinyGo, and the rest of this module cannot: the root
-// package imports xsync, linkdata/deadlock, and lib/pq, the last of which
-// TinyGo will not compile. Go links per package, so this one stays reachable
-// from those targets as long as its imports stay stdlib. That is enforced by
-// TestPackageImportsOnlyStdlib rather than left to reviewer memory.
+// This package is deliberately stdlib-only, which is what keeps it usable from
+// the multicast edge's js/wasm, wasip1/wasm and TinyGo builds in EVERY build
+// configuration.
+//
+// The root api package of this module reaches those targets too, but
+// conditionally: its lib/pq-importing files carry `//go:build !wasm || persist`
+// and delivery_wasm.go substitutes for them, so pq drops out under GOARCH=wasm.
+// Add `-tags persist` -- which multicast's own IWA target uses -- and pq comes
+// back, and TinyGo then fails to compile it outright (`proto.MaxUint32
+// overflows int`, `tls.Config has no field Clone`). A stdlib-only package needs
+// none of that machinery and cannot be broken by a tag combination.
+//
+// Go links per package, so that property is local to this package rather than
+// inherited from the module. It is enforced by TestPackageImportsOnlyStdlib
+// rather than left to reviewer memory.
 package settlement
 
 import (
