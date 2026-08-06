@@ -37,13 +37,24 @@ compiler enforcing it.
 
 ### 1. This package must stay stdlib-only
 
-The multicast edge builds for `js/wasm`, `wasip1/wasm`, and **TinyGo**. The root
-`api` package of this module cannot go to those targets — it imports `xsync`,
-`linkdata/deadlock`, and `lib/pq`, and TinyGo will not compile `pq`.
+The multicast edge builds for `js/wasm`, `wasip1/wasm`, and **TinyGo**.
 
-Go links **per package**, so this one stays reachable from those targets exactly
-as long as its own imports stay stdlib. That is invisible in `go.mod`, which
-lists `pq` either way.
+The root `api` package of this module reaches those targets too — but
+*conditionally*. Its `lib/pq`-importing files carry `//go:build !wasm || persist`
+and `delivery_wasm.go` substitutes when they drop out, so `pq` disappears under
+`GOARCH=wasm`. Add `-tags persist` — the configuration multicast's own IWA
+target uses — and `pq` is compiled in, and TinyGo fails on it outright:
+
+```
+tinygo -target=wasm                  root api pkg    exit 0
+tinygo -target=wasm -tags persist    root api pkg    exit 1   # lib/pq
+tinygo -target=wasm -tags persist    this package    exit 0
+```
+
+Go links **per package**, so this package's edge-safety is a property of its own
+imports — and unlike the root package's, it holds under every tag combination,
+with no `//go:build` machinery and no shadow file to maintain. That is invisible
+in `go.mod`, which lists `pq` either way.
 
 A single convenience import here — a UUID helper, a logger, `xsync` for the
 limiter — silently un-builds the edge, and the failure surfaces as a wasm build

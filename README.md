@@ -41,21 +41,35 @@ See also `docs/TRAFFICOPS_INTEGRATION.md` and `docs/OPENCASTING.md`.
 ## Constraint: the edge builds for wasm and TinyGo
 
 The multicast delivery edge compiles for `js/wasm`, `wasip1/wasm`, and **TinyGo**.
-The root `api` package cannot go to those targets:
 
-| File | Import | Problem |
+The root `api` package does reach those targets — but conditionally, via build
+tags. Its `lib/pq`-importing files carry `//go:build !wasm || persist`, and
+`delivery_wasm.go` (`wasm && !persist`) substitutes when they drop out:
+
+| File | Import | Build tag |
 | --- | --- | --- |
-| `locker.go` | `puzpuzpuz/xsync/v3` | — |
-| `util.go` | `linkdata/deadlock` | — |
-| `types_persist.go`, `delivery_persist.go` | `lib/pq` | TinyGo cannot compile it |
+| `types_persist.go`, `delivery_persist.go`, `util_persist.go`, `time_persist.go` | `lib/pq` | `!wasm \|\| persist` |
+| `delivery_wasm.go` | — | `wasm && !persist` |
+| `locker.go` | `puzpuzpuz/xsync/v3` | none — always compiled |
+| `util.go` | `linkdata/deadlock` | none — always compiled |
 
-`delivery_wasm.go` exists precisely to give the wasm build a `pq`-free path
-through the root package.
+So the root package is edge-safe **only in the no-`persist` configuration**. Add
+`-tags persist` — which multicast's own IWA target uses — and `lib/pq` is
+compiled in, and TinyGo fails on it outright. Measured:
 
-**Go links per package, not per module.** A package in this module whose own
-imports are stdlib-only stays reachable from a TinyGo build even though `go.mod`
-requires `pq`, `xsync`, and `deadlock` — those are only linked if some package
-you actually import pulls them in.
+```
+tinygo -target=wasm                    root api pkg    exit 0
+tinygo -target=wasm -tags persist      root api pkg    exit 1   # lib/pq
+tinygo -target=wasm -tags persist      settlement      exit 0
+```
+
+(`proto.MaxUint32 (untyped int constant 4294967295) overflows int`,
+`v.Clone undefined (type *tls.Config has no field or method Clone)`.)
+
+**Go links per package, not per module.** A package whose own imports are
+stdlib-only is reachable from every one of those targets in every tag
+combination, with no `//go:build` machinery and no shadow file — and without
+depending on someone maintaining that machinery correctly.
 
 So when you add something the edge will import, put it in **its own package**
 with stdlib-only imports rather than in the root `api` package. `settlement` is
@@ -71,10 +85,11 @@ GOOS=wasip1 GOARCH=wasm go build ./yourpkg/
 ```
 
 For TinyGo, a type-check is not enough — link a `main` that calls the exported
-symbols, because failures show up in the linker:
+symbols, because failures show up in the linker. Check the exit code explicitly;
+piping the output into `head` will mask a non-zero status:
 
 ```sh
-tinygo build -o /dev/null -target=wasi ./path/to/probe-main/
+tinygo build -o /dev/null -target=wasi ./path/to/probe-main/; echo "exit=$?"
 ```
 
 ## Wire contracts
