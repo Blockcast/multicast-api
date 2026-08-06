@@ -1,0 +1,79 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+#
+# The first CI in this repository.
+#
+# It exists because this module became the canonical home of a security wire
+# contract (settlement.SessionLease) while having no automated checks at all.
+# Until this workflow, TestPackageImportsOnlyStdlib, the lease signature and
+# identity-binding regression suite, and the wasm builds were local receipts
+# that nothing re-ran before a merge or a tag.
+#
+# Design notes, so the next person does not "fix" these on sight:
+#
+#   No `paths:` filter. This is meant to be a REQUIRED status check, and a
+#   path-filtered required check never reports on a PR that misses the paths --
+#   which blocks that PR forever on "Expected — waiting for status". The job is
+#   a checkout plus a test and two cross-compiles, so running it on every PR is
+#   cheap enough that filtering would buy nothing.
+#
+#   `synchronize` is included on purpose. Blockcast trims that trigger from
+#   heavy self-hosted suites so pushes to a PR branch do not burn scarce runner
+#   capacity, but this runs on GitHub-hosted capacity in well under a minute.
+#   Re-checking after every push is the point: the property being guarded is
+#   "no third-party import crept in", and imports creep in on later pushes.
+#
+#   One job, not three. One job is one status context, which keeps branch
+#   protection legible. Splitting it would mean three contexts to add and keep
+#   in sync with the protection rule.
+#
+# Scope: ./settlement/... only, deliberately. `go test ./...` is currently RED
+# on main -- fec/TestESIRangeFromRangeListBorderCase fails, predating this
+# workflow. A gate that is red on day one teaches everyone to ignore it. Widen
+# this to ./... once that test is fixed; that is tracked separately rather than
+# fixed here, because it is unrelated to the contract this gate protects.
+
+name: Settlement Contract
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  settlement:
+    name: settlement
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Vet
+        run: go vet ./settlement/...
+
+      - name: Test
+        run: go test ./settlement/...
+
+      # The stdlib-only property is what keeps this package reachable from the
+      # multicast edge, which builds for wasm and TinyGo. TestPackageImportsOnlyStdlib
+      # asserts it hermetically; these two builds prove it against a real
+      # toolchain, so a stdlib package that is nonetheless unavailable on a
+      # target (a future syscall/js-only dependency, say) still fails here.
+      - name: Build for js/wasm
+        run: GOOS=js GOARCH=wasm go build ./settlement/...
+
+      - name: Build for wasip1/wasm
+        run: GOOS=wasip1 GOARCH=wasm go build ./settlement/...
