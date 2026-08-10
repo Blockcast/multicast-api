@@ -23,7 +23,7 @@ func TestSessionLeaseIssueEncodeVerify(t *testing.T) {
 	signer.Now = func() time.Time { return now }
 	lease, err := signer.Issue(SessionLeaseRequest{
 		SID: "session-1", Source: "192.0.2.1", Group: "232.0.2.1",
-		RouteVersion: "route-7", LCUMHOrigin: "64512:1:3221225985",
+		RoutingMIVersion: "2.0-routing", LCUMHOrigin: "64512:1:3221225985",
 		ClientIP: net.ParseIP("203.0.113.9"), Lifetime: 5 * time.Minute,
 	})
 	if err != nil {
@@ -51,13 +51,46 @@ func TestSessionLeaseIssueEncodeVerify(t *testing.T) {
 	if decoded.SupplierID != "author-1" || decoded.GatewayID != "gateway-1" || decoded.Source != "192.0.2.1" || decoded.Group != "232.0.2.1" {
 		t.Fatalf("decoded lease = %#v", decoded)
 	}
+	if decoded.SettlementVersion != 2 || decoded.RoutingMIVersion != "2.0-routing" {
+		t.Fatalf("decoded version fields = settlement %d, routing MI %q", decoded.SettlementVersion, decoded.RoutingMIVersion)
+	}
+}
+
+func TestSessionLeaseRejectsV1WireShape(t *testing.T) {
+	legacy := base64.RawURLEncoding.EncodeToString([]byte(`{"record_kind":"SessionLease","settlement_version":1,"route_version":"2.0-routing"}`))
+	if _, err := DecodeSessionLease(legacy); !errors.Is(err, ErrInvalidSessionLease) {
+		t.Fatalf("DecodeSessionLease(v1 shape) error = %v, want ErrInvalidSessionLease", err)
+	}
+}
+
+func TestSessionLeaseVerifierRejectsV1SettlementVersion(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0).UTC()
+	signer, cert := testSessionLeaseSigner(t, now)
+	signer.Now = func() time.Time { return now }
+	lease, err := signer.Issue(SessionLeaseRequest{
+		SID: "session-1", Source: "192.0.2.1", Group: "232.0.2.1",
+		RoutingMIVersion: "2.0-routing", LCUMHOrigin: "64512:1:1",
+		ClientIP: net.ParseIP("203.0.113.9"), Lifetime: time.Minute,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, keyID, err := (SessionLeaseVerifier{TrustDomain: "bcast.id"}).VerificationKey(cert, "author-1", "gateway-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lease.SettlementVersion = 1
+	verifier := SessionLeaseVerifier{TrustDomain: "bcast.id", Keys: map[string]SessionLeaseVerificationKey{keyID: key}}
+	if err := verifier.Verify(lease, now); !errors.Is(err, ErrUnsupportedSettlement) {
+		t.Fatalf("Verify(v1 lease) error = %v, want ErrUnsupportedSettlement", err)
+	}
 }
 
 func TestSessionLeaseVerifierRejectsTamperingAndExpiry(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0).UTC()
 	signer, cert := testSessionLeaseSigner(t, now)
 	signer.Now = func() time.Time { return now }
-	lease, err := signer.Issue(SessionLeaseRequest{SID: "session-1", Source: "192.0.2.1", Group: "232.0.2.1", RouteVersion: "route-7", LCUMHOrigin: "64512:1:1", ClientIP: net.ParseIP("203.0.113.9"), Lifetime: time.Minute})
+	lease, err := signer.Issue(SessionLeaseRequest{SID: "session-1", Source: "192.0.2.1", Group: "232.0.2.1", RoutingMIVersion: "2.0-routing", LCUMHOrigin: "64512:1:1", ClientIP: net.ParseIP("203.0.113.9"), Lifetime: time.Minute})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,7 +230,7 @@ func TestSessionLeaseVerifierUsesConfiguredTrustDomain(t *testing.T) {
 		t.Fatal(err)
 	}
 	signer.Now = func() time.Time { return now }
-	lease, err := signer.Issue(SessionLeaseRequest{SID: "session-1", Source: "192.0.2.1", Group: "232.0.2.1", RouteVersion: "route-7", LCUMHOrigin: "64512:1:1", ClientIP: net.ParseIP("203.0.113.9"), Lifetime: time.Minute})
+	lease, err := signer.Issue(SessionLeaseRequest{SID: "session-1", Source: "192.0.2.1", Group: "232.0.2.1", RoutingMIVersion: "2.0-routing", LCUMHOrigin: "64512:1:1", ClientIP: net.ParseIP("203.0.113.9"), Lifetime: time.Minute})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -224,7 +257,7 @@ func TestSessionLeaseVerifierAcceptsLegacyMagmaIdentityURI(t *testing.T) {
 		t.Fatal(err)
 	}
 	signer.Now = func() time.Time { return now }
-	lease, err := signer.Issue(SessionLeaseRequest{SID: "session-1", Source: "192.0.2.1", Group: "232.0.2.1", RouteVersion: "route-7", LCUMHOrigin: "64512:1:1", ClientIP: net.ParseIP("203.0.113.9"), Lifetime: time.Minute})
+	lease, err := signer.Issue(SessionLeaseRequest{SID: "session-1", Source: "192.0.2.1", Group: "232.0.2.1", RoutingMIVersion: "2.0-routing", LCUMHOrigin: "64512:1:1", ClientIP: net.ParseIP("203.0.113.9"), Lifetime: time.Minute})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -370,7 +403,7 @@ func TestSessionLeaseIssueCanonicalizesLimiterKey(t *testing.T) {
 
 	req := SessionLeaseRequest{
 		SID: "svc-1", Source: "2001:db8::1", Group: "ff3e::8000:1",
-		RouteVersion: "route-7", LCUMHOrigin: "64512:1:3221225985",
+		RoutingMIVersion: "2.0-routing", LCUMHOrigin: "64512:1:3221225985",
 		ClientIP: net.ParseIP("203.0.113.9"), Lifetime: 5 * time.Minute,
 	}
 	if _, err := signer.Issue(req); err != nil {
@@ -417,13 +450,13 @@ func TestSessionLeaseIssueHoldsTupleOnlyForIssuedLifetime(t *testing.T) {
 	signer.Limiter = NewSessionLeaseLimiter()
 
 	req := SessionLeaseRequest{
-		SID:          "sid-1",
-		Source:       "10.0.0.1",
-		Group:        "232.0.0.1",
-		RouteVersion: "route-7",
-		LCUMHOrigin:  "64512:1:3221225985",
-		ClientIP:     net.ParseIP("203.0.113.10"),
-		Lifetime:     time.Minute,
+		SID:              "sid-1",
+		Source:           "10.0.0.1",
+		Group:            "232.0.0.1",
+		RoutingMIVersion: "2.0-routing",
+		LCUMHOrigin:      "64512:1:3221225985",
+		ClientIP:         net.ParseIP("203.0.113.10"),
+		Lifetime:         time.Minute,
 	}
 	if _, err := signer.Issue(req); err != nil {
 		t.Fatal(err)
@@ -488,7 +521,7 @@ func TestIssueReleasesLimiterWhenSigningFails(t *testing.T) {
 			signer.Rand = &failAfterReader{remaining: tc.entropy}
 			req := SessionLeaseRequest{
 				SID: "sid-1", Source: "10.0.0.1", Group: "232.0.0.1",
-				RouteVersion: "v1", LCUMHOrigin: "origin-1",
+				RoutingMIVersion: "2.0-routing", LCUMHOrigin: "origin-1",
 				ClientIP: net.ParseIP("198.51.100.7"), Lifetime: time.Minute,
 			}
 			if _, err := signer.Issue(req); err == nil {
@@ -526,7 +559,7 @@ func TestLiveHoldCoversVerifierSkewWindow(t *testing.T) {
 	signer.Now = func() time.Time { return now }
 	req := SessionLeaseRequest{
 		SID: "sid-1", Source: "10.0.0.1", Group: "232.0.0.1",
-		RouteVersion: "v1", LCUMHOrigin: "origin-1",
+		RoutingMIVersion: "2.0-routing", LCUMHOrigin: "origin-1",
 		ClientIP: net.ParseIP("198.51.100.7"), Lifetime: lifetime,
 	}
 	first, err := signer.Issue(req)
@@ -718,7 +751,7 @@ func TestVerificationKeyIsImmutableAfterRegistration(t *testing.T) {
 	// was registered still verifies, because that key is what the verifier holds.
 	lease, err := signer.Issue(SessionLeaseRequest{
 		SID: "session-1", Source: "192.0.2.1", Group: "232.0.2.1",
-		RouteVersion: "route-7", LCUMHOrigin: "64512:1:1",
+		RoutingMIVersion: "2.0-routing", LCUMHOrigin: "64512:1:1",
 		ClientIP: net.ParseIP("203.0.113.9"), Lifetime: time.Minute,
 	})
 	if err != nil {
@@ -764,7 +797,7 @@ func TestDecodeSessionLeaseRejectsTrailingValue(t *testing.T) {
 	signer.Now = func() time.Time { return now }
 	lease, err := signer.Issue(SessionLeaseRequest{
 		SID: "session-1", Source: "192.0.2.1", Group: "232.0.2.1",
-		RouteVersion: "route-7", LCUMHOrigin: "64512:1:1",
+		RoutingMIVersion: "2.0-routing", LCUMHOrigin: "64512:1:1",
 		ClientIP: net.ParseIP("203.0.113.9"), Lifetime: time.Minute,
 	})
 	if err != nil {
