@@ -53,11 +53,11 @@ import (
 )
 
 const (
-	SessionLeaseSettlementVersion = 1
+	SessionLeaseSettlementVersion = 2
 	SessionLeaseMaxLifetime       = 15 * time.Minute
 	SessionLeaseMaxClockSkew      = 30 * time.Second
 	SessionLeaseMaxBeaconGap      = 30 * time.Second
-	sessionLeaseDomainSeparator   = "blockcast:mvpn-settlement:v1:"
+	sessionLeaseDomainSeparator   = "blockcast:mvpn-settlement:v2:"
 )
 
 var (
@@ -82,7 +82,7 @@ var (
 //
 // sessionLeaseDigest hashes a domain-separated preimage:
 //
-//	sha256( "blockcast:mvpn-settlement:v1:" + RecordKind + 0x00 + canonicalSessionLeaseJSON(lease) )
+//	sha256( "blockcast:mvpn-settlement:v2:" + RecordKind + 0x00 + canonicalSessionLeaseJSON(lease) )
 //
 // The canonical JSON carries every field below EXCEPT RecordDigest and
 // Signature, emitted in lexicographic key order. The separator and RecordKind
@@ -124,9 +124,9 @@ type SessionLease struct {
 	// concurrent lease past the one-live-lease limiter.
 	Source string `json:"source"`
 	Group  string `json:"group"`
-	// RouteVersion is the routing-MI envelope version the session was set up
+	// RoutingMIVersion is the routing-MI envelope version the session was set up
 	// under (api.CdnTransportMIVersion at the sender). Required non-empty.
-	RouteVersion string `json:"route_version"`
+	RoutingMIVersion string `json:"routing_mi_version"`
 	// LCUMHOrigin identifies the upstream multicast hop the traffic originates
 	// from, in practice an ASN-scoped triple such as "64512:1:3221225985". It is
 	// operator-supplied and OPAQUE to this package: signed and required to be
@@ -164,11 +164,11 @@ type SessionLease struct {
 // fields that decide who the lease belongs to or how long it lives beyond
 // SessionLeaseMaxLifetime.
 type SessionLeaseRequest struct {
-	SID          string
-	Source       string
-	Group        string
-	RouteVersion string
-	LCUMHOrigin  string
+	SID              string
+	Source           string
+	Group            string
+	RoutingMIVersion string
+	LCUMHOrigin      string
 	// ClientIP is used only for rate-limiting scope; it is not part of the
 	// signed lease.
 	ClientIP net.IP
@@ -264,7 +264,7 @@ func (s *SessionLeaseSigner) Issue(req SessionLeaseRequest) (SessionLease, error
 	if s == nil || s.PrivateKey == nil || s.SupplierID == "" || s.GatewayID == "" || s.KeyID == "" {
 		return SessionLease{}, ErrIdentityBindingInvalid
 	}
-	if req.SID == "" || net.ParseIP(req.Source) == nil || net.ParseIP(req.Group) == nil || req.RouteVersion == "" || req.LCUMHOrigin == "" || !sessionLeaseStringsASCII(req.SID, req.RouteVersion, req.LCUMHOrigin) {
+	if req.SID == "" || net.ParseIP(req.Source) == nil || net.ParseIP(req.Group) == nil || req.RoutingMIVersion == "" || req.LCUMHOrigin == "" || !sessionLeaseStringsASCII(req.SID, req.RoutingMIVersion, req.LCUMHOrigin) {
 		return SessionLease{}, ErrInvalidSessionLease
 	}
 	lifetime := req.Lifetime
@@ -315,7 +315,7 @@ func (s *SessionLeaseSigner) Issue(req SessionLeaseRequest) (SessionLease, error
 		SID:               req.SID,
 		Source:            source,
 		Group:             group,
-		RouteVersion:      req.RouteVersion,
+		RoutingMIVersion:  req.RoutingMIVersion,
 		LCUMHOrigin:       req.LCUMHOrigin,
 		IssuedAtNS:        now.UnixNano(),
 		NotBeforeNS:       now.UnixNano(),
@@ -455,13 +455,13 @@ func sessionLeaseDigest(lease SessionLease) ([32]byte, error) {
 }
 
 func validateSessionLease(lease SessionLease, at time.Time) error {
-	if lease.RecordKind != "SessionLease" || lease.LeaseID == "" || lease.SupplierID == "" || lease.GatewayID == "" || lease.SID == "" || lease.RouteVersion == "" || lease.LCUMHOrigin == "" || lease.IssuerKeyID == "" {
+	if lease.RecordKind != "SessionLease" || lease.LeaseID == "" || lease.SupplierID == "" || lease.GatewayID == "" || lease.SID == "" || lease.RoutingMIVersion == "" || lease.LCUMHOrigin == "" || lease.IssuerKeyID == "" {
 		return ErrInvalidSessionLease
 	}
 	if net.ParseIP(lease.Source) == nil || net.ParseIP(lease.Group) == nil {
 		return ErrInvalidSessionLease
 	}
-	if !sessionLeaseStringsASCII(lease.RecordKind, lease.LeaseID, lease.SupplierID, lease.GatewayID, lease.SID, lease.Source, lease.Group, lease.RouteVersion, lease.LCUMHOrigin, lease.LeaseNonce, lease.IssuerKeyID) {
+	if !sessionLeaseStringsASCII(lease.RecordKind, lease.LeaseID, lease.SupplierID, lease.GatewayID, lease.SID, lease.Source, lease.Group, lease.RoutingMIVersion, lease.LCUMHOrigin, lease.LeaseNonce, lease.IssuerKeyID) {
 		return ErrInvalidSessionLease
 	}
 	nonce, err := base64.RawURLEncoding.DecodeString(lease.LeaseNonce)
@@ -482,7 +482,7 @@ func validateSessionLease(lease SessionLease, at time.Time) error {
 }
 
 // canonicalSessionLeaseJSON emits the deterministic Go JSON representation for
-// the v1 lease preimage. Fields are declared in lexicographic key order and
+// the v2 lease preimage. Fields are declared in lexicographic key order and
 // lease strings are constrained to printable ASCII. Nanosecond timestamps can
 // exceed JCS's safe-integer range, so other implementations must preserve the
 // integer encoding exactly rather than relying on ECMAScript numbers.
@@ -499,7 +499,7 @@ func canonicalSessionLeaseJSON(lease SessionLease) ([]byte, error) {
 		MaxBeaconGapNS    int64  `json:"max_beacon_gap_ns"`
 		NotBeforeNS       int64  `json:"not_before_ns"`
 		RecordKind        string `json:"record_kind"`
-		RouteVersion      string `json:"route_version"`
+		RoutingMIVersion  string `json:"routing_mi_version"`
 		SettlementVersion uint64 `json:"settlement_version"`
 		SID               string `json:"sid"`
 		Source            string `json:"source"`
@@ -508,7 +508,7 @@ func canonicalSessionLeaseJSON(lease SessionLease) ([]byte, error) {
 		ExpiresAtNS: lease.ExpiresAtNS, GatewayID: lease.GatewayID, Group: lease.Group,
 		IssuedAtNS: lease.IssuedAtNS, IssuerKeyID: lease.IssuerKeyID, LCUMHOrigin: lease.LCUMHOrigin,
 		LeaseID: lease.LeaseID, LeaseNonce: lease.LeaseNonce, MaxBeaconGapNS: lease.MaxBeaconGapNS,
-		NotBeforeNS: lease.NotBeforeNS, RecordKind: lease.RecordKind, RouteVersion: lease.RouteVersion,
+		NotBeforeNS: lease.NotBeforeNS, RecordKind: lease.RecordKind, RoutingMIVersion: lease.RoutingMIVersion,
 		SettlementVersion: lease.SettlementVersion, SID: lease.SID, Source: lease.Source, SupplierID: lease.SupplierID,
 	}
 	var b bytes.Buffer
