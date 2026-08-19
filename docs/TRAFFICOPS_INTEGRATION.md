@@ -138,12 +138,40 @@ For unicast-to-multicast tunneling via AMT (RFC 7450):
 
 ```go
 type AMTRelayConfig struct {
-    Address   string  // AMT relay hostname or IP
-    Port      int     // Default: 2268
-    DRIAD     string  // DRIAD DNS name (RFC 8777)
-    Timeout   string  // Connection timeout
+    Address string   // AMT relay hostname or IP
+    Port    uint16   // Default: 2268
+    Timeout Duration // DEPRECATED: seeds both bounds below
+
+    Mode                  AMTMode  // "auto" (default) | "native" | "tunnel"
+    ProbeWindow           Duration // native-evidence window
+    RelayHandshakeTimeout Duration // one round trip to Address
+
+    UseDRIAD bool // DRIAD (RFC 8777) automatic relay discovery
 }
 ```
+
+`Mode` states the native-versus-tunnel choice explicitly instead of leaving it
+inferred from whether `Address` happens to be populated. The zero value means
+`auto`, so profiles written before the field existed are unchanged on upgrade.
+Read it via `EffectiveMode()`, which resolves the empty string to `auto`.
+
+`Timeout` is deprecated because it drove two physically unrelated bounds from
+one number: the window spent waiting for native multicast traffic, and the AMT
+relay handshake. Production once ran a single `50ms` for both, which destroyed
+the native join and then gave the replacement tunnel `50ms` to complete a round
+trip, so neither path came up (BLO-28640).
+
+It is retained as an alias rather than removed, because it is inherited by
+profile clone across the fleet. When either new key is unset, `Timeout` seeds
+it, so existing profiles keep their current behaviour; precedence is per-field,
+so setting only `ProbeWindow` leaves `Timeout` seeding the handshake bound. Read
+the resolved values via `EffectiveProbeWindow()` and
+`EffectiveRelayHandshakeTimeout()`.
+
+Neither accessor applies a floor. The receiver (`go-amt`) owns those, because
+they derive from transport facts this package cannot see -- the probe-window
+floor is a multiple of the stream's signalling cadence. Duplicating them here
+would give two sources of truth that drift.
 
 DRIAD (DNS Reverse IP AMT Discovery) enables automatic relay discovery:
 
