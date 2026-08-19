@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"fmt"
+	"strings"
 )
 
 // AMTMode selects how a multicast receiver chooses between a native multicast
@@ -28,6 +29,18 @@ import (
 // So the mapping onto amt.AMTModeAuto / AMTModeNative / AMTModeTunnel is
 // one-to-one but is performed by the consumer that already imports both
 // packages (Blockcast/multicast), not here.
+//
+// # What this package validates, and what it does not
+//
+// UnmarshalText rejects a value that is not a mode at all, because that is a
+// decodability question and this package owns decoding. It does NOT reject a
+// mode that is well-formed but cannot be honoured in context -- notably
+// AMTModeTunnel with an empty Address, which degrades to native. Cross-field
+// consistency belongs to the receiver, for the same reason the probe-window and
+// handshake FLOORS do (see EffectiveProbeWindow): whether a relay address is
+// reachable, or a mode deliverable, depends on transport facts this package
+// cannot see. Adding a Validate() here would put half that judgement in the
+// wrong place and leave the two halves to drift.
 type AMTMode string
 
 const (
@@ -55,7 +68,27 @@ const (
 // the zero value and is accepted as a synonym for AMTModeAuto.
 var AMTModes = []interface{}{AMTMode(""), AMTModeAuto, AMTModeNative, AMTModeTunnel}
 
-var amtModeError = fmt.Errorf(`invalid AMT mode, want one of "auto", "native", "tunnel" (or empty for auto)`)
+// amtModeError is the sentinel returned for a value outside the enum. Callers
+// wrap it with the rejected value, so match it with errors.Is rather than by
+// string.
+//
+// The valid set is interpolated from AMTModes rather than restated in prose, so
+// it cannot drift when a mode is added -- the same reason transportError and
+// deliveryError in enums.go interpolate their slices. The empty string is a
+// member of that set but is described in words instead of printed, because an
+// empty token inside a list of quoted values reads as a formatting bug.
+var amtModeError = fmt.Errorf("invalid AMT mode, want one of %s (or empty for auto)", spellableAMTModes())
+
+// spellableAMTModes renders the non-empty members of AMTModes as a quoted list.
+func spellableAMTModes() string {
+	var out []string
+	for _, v := range AMTModes {
+		if m := v.(AMTMode); m != "" {
+			out = append(out, fmt.Sprintf("%q", string(m)))
+		}
+	}
+	return strings.Join(out, ", ")
+}
 
 // Enum reports the accepted values, matching the convention used by the other
 // string enums in this package.
@@ -74,6 +107,10 @@ func (m AMTMode) String() string { return string(m) }
 //
 // The empty string is accepted: an absent key never reaches this method, but an
 // explicit `"mode": ""` is a legitimate way to spell "use the default".
+//
+// The rejected value is echoed into the error. For a wire contract shared by
+// independently written programs, "which profile has the typo" is the question
+// the operator actually has, and the enum name alone does not answer it.
 func (m *AMTMode) UnmarshalText(in []byte) error {
 	for i, v := range AMTModes {
 		if bytes.Equal(in, []byte(v.(AMTMode))) {
@@ -81,7 +118,7 @@ func (m *AMTMode) UnmarshalText(in []byte) error {
 			return nil
 		}
 	}
-	return amtModeError
+	return fmt.Errorf("%w: got %q", amtModeError, in)
 }
 
 // EffectiveMode resolves the zero value to AMTModeAuto.

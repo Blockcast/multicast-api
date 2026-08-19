@@ -127,6 +127,15 @@ type AMTRelayConfig struct {
 	// This is one of the two bounds Timeout used to conflate. It is sized
 	// against the signalling cadence of the stream being received, NOT against
 	// the round trip to the relay.
+	//
+	// Zero means UNSET, not "do not probe": the value is then seeded from the
+	// deprecated Timeout. An explicit "probeWindow": "0s" is therefore
+	// indistinguishable from omitting the key, and (because of omitempty) is
+	// dropped on re-marshal. That is deliberate rather than a gap -- "hand over
+	// to the tunnel immediately, without probing" is already spelled
+	// Mode: AMTModeTunnel, which says it in one place instead of encoding it as
+	// a degenerate window. If a future change needs to tell the two apart, this
+	// field has to become *Duration.
 	ProbeWindow Duration `json:"probeWindow,omitempty"`
 
 	// RelayHandshakeTimeout bounds the AMT relay handshake -- one round trip to
@@ -136,6 +145,8 @@ type AMTRelayConfig struct {
 	// single 50ms value for both, which destroyed the native join and then gave
 	// the replacement tunnel 50ms to complete a handshake, so neither path came
 	// up (BLO-28640).
+	//
+	// Zero means UNSET and is seeded from Timeout, exactly as for ProbeWindow.
 	RelayHandshakeTimeout Duration `json:"relayHandshakeTimeout,omitempty"`
 
 	// DRIAD (RFC 8777) - enable automatic relay discovery via DNS

@@ -206,6 +206,102 @@ func TestAMTModeRejectsUnknownValues(t *testing.T) {
 	}
 }
 
+// A malformed duration must fail the same way a malformed mode does: with an
+// error naming the problem, not a panic.
+//
+// The empty string is the case that matters operationally -- it is what a
+// half-filled profile clone or a templated config with an unset variable
+// produces, which is exactly the inheritance path the deprecated Timeout alias
+// is retained to protect. Duration.Scan indexes s[len(s)-1] unguarded, so
+// before BLO-28842 every one of these keys took the process down from inside
+// encoding/json with `index out of range [-1]`.
+//
+// A panic here fails the test binary outright rather than this subtest, which is
+// the loudest available signal and is intentional.
+//
+// Note this test pins REJECTION only. Duration's existing leniency (a bare
+// number, hh:mm:ss) is pinned separately below and deliberately left alone.
+func TestAMTRelayConfigRejectsMalformedDurations(t *testing.T) {
+	for _, key := range []string{"timeout", "probeWindow", "relayHandshakeTimeout"} {
+		for _, bad := range []string{``, ` `, `abc`, `10x`} {
+			in := `{"` + key + `":"` + bad + `"}`
+			t.Run(in, func(t *testing.T) {
+				var cfg AMTRelayConfig
+				assert.Error(t, json.Unmarshal([]byte(in), &cfg))
+			})
+		}
+	}
+}
+
+// Duration is deliberately lenient in two ways that are easy to mistake for
+// bugs while tightening the rejection above, so pin them as intended: a bare
+// number means seconds, and hh:mm:ss is accepted. Both predate BLO-28842 and
+// are wire-visible, so narrowing them would break profiles that are valid
+// today -- which is why "10" is absent from the malformed table.
+//
+// The minute- and hour-suffixed cases are the ones that were BROKEN: Scan used
+// to append "s" to anything not already ending in "s", so "1m" decoded to 1
+// millisecond with no error -- a 60000x error, and the BLO-28640 failure mode
+// (a probe window far shorter than intended) on the very keys this change
+// adds. These assertions are what stop that regressing.
+func TestAMTRelayConfigDurationLeniencyIsPreserved(t *testing.T) {
+	for _, tc := range []struct {
+		in   string
+		want Duration
+	}{
+		// Pre-existing leniency: must keep working unchanged.
+		{`"30"`, Duration(30 * time.Second)},
+		{`"0"`, 0},
+		{`"00:01:30"`, Duration(90 * time.Second)},
+		// Explicit Go units: previously mangled or rejected.
+		{`"1m"`, Duration(time.Minute)},
+		{`"2m"`, Duration(2 * time.Minute)},
+		{`"30m"`, Duration(30 * time.Minute)},
+		{`"1h"`, Duration(time.Hour)},
+		{`"1h30m"`, Duration(90 * time.Minute)},
+		{`"10s"`, Duration(10 * time.Second)},
+		{`"500ms"`, Duration(500 * time.Millisecond)},
+		{`"50ms"`, Duration(50 * time.Millisecond)},
+	} {
+		t.Run(tc.in, func(t *testing.T) {
+			var cfg AMTRelayConfig
+			require.NoError(t, json.Unmarshal([]byte(`{"timeout":`+tc.in+`}`), &cfg))
+			assert.Equal(t, tc.want, cfg.Timeout)
+		})
+	}
+}
+
+// The rejection error must be matchable with errors.Is and must name the
+// offending value, so an operator reading a startup failure learns which
+// profile has the typo. It must also enumerate the valid set from AMTModes
+// rather than from prose, so it cannot drift when a mode is added.
+func TestAMTModeErrorIsMatchableAndNamesTheValue(t *testing.T) {
+	var cfg AMTRelayConfig
+	err := json.Unmarshal([]byte(`{"mode":"nativ"}`), &cfg)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, amtModeError)
+	assert.Contains(t, err.Error(), `"nativ"`, "error must echo the rejected value")
+
+	for _, v := range AMTModes {
+		if m := v.(AMTMode); m != "" {
+			assert.Contains(t, amtModeError.Error(), string(m),
+				"valid set must be interpolated from AMTModes, not restated in prose")
+		}
+	}
+}
+
+// Zero is UNSET, not "do not probe" -- pinned so that the documented contract
+// and the accessor cannot drift apart. An explicit "0s" is indistinguishable
+// from omitting the key and is therefore seeded from Timeout.
+func TestAMTRelayConfigExplicitZeroIsTreatedAsUnset(t *testing.T) {
+	var cfg AMTRelayConfig
+	require.NoError(t, json.Unmarshal(
+		[]byte(`{"timeout":"7s","probeWindow":"0s","relayHandshakeTimeout":"0s"}`), &cfg))
+
+	assert.Equal(t, Duration(7*time.Second), cfg.EffectiveProbeWindow())
+	assert.Equal(t, Duration(7*time.Second), cfg.EffectiveRelayHandshakeTimeout())
+}
+
 // Every constant must be reachable from the wire, and the set must stay in sync
 // with Enum(). A mode that cannot be spelled in a profile is not an escape
 // hatch.
