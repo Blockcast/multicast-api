@@ -253,6 +253,15 @@ func TestAMTRelayConfigDurationLeniencyIsPreserved(t *testing.T) {
 		{`"30"`, Duration(30 * time.Second)},
 		{`"0"`, 0},
 		{`"00:01:30"`, Duration(90 * time.Second)},
+		// The TWO-part colon form is the trap, and it is why this table exists:
+		// only the first ":" becomes "h" and the second becomes "m", so "01:30"
+		// is 1h0m30s -- NOT the 1m30s a reader naturally expects. Pinned so a
+		// future tightening of the parser has to confront it deliberately.
+		{`"01:30"`, Duration(time.Hour + 30*time.Second)},
+		{`"1:30"`, Duration(time.Hour + 30*time.Second)},
+		// Postgres renders every duration-typed `interval` column in hh:mm:ss,
+		// which is the form that keeps DB-sourced values safe across BLO-28842.
+		{`"00:30:00"`, Duration(30 * time.Minute)},
 		// Explicit Go units: previously mangled or rejected.
 		{`"1m"`, Duration(time.Minute)},
 		{`"2m"`, Duration(2 * time.Minute)},

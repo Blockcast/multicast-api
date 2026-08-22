@@ -156,9 +156,38 @@ func (d *Duration) Scan(value interface{}) error {
 	// keys where "1m" is an entirely natural thing to write, so this is now
 	// reachable in a way it was not before (BLO-28842).
 	//
-	// Every input that parses correctly today still parses to the same value:
-	// the bare-count and hh:mm:ss leniency both end in a digit and are
-	// unaffected, and an explicit Go unit is now honoured rather than mangled.
+	// SCOPE: this is the shared Duration.Scan, so what follows changes decoding
+	// for EVERY Duration in this package, not only the two AMT keys named above.
+	// That is DeliveryMethod.StartOffset, .Duration, .RepairWindow,
+	// KeepUpdateInterval and CarouselScheduledInterval behind their `db:` tags,
+	// plus DeliveryMethod.SignalInterval ("interval") on the wire.
+	//
+	// It is deliberately NOT value-preserving for one input class. Precisely:
+	//
+	//	unchanged  ends in a digit ("30", "00:01:30") or in an explicit unit
+	//	           ("90s", "50ms", "1m30s", "1us")
+	//	unchanged  everything that errors today still errors ("abc", "10x", "1d")
+	//	CHANGED    minute/hour-suffixed values now mean what they say:
+	//	           "1m" 1ms->1m0s, "30m" 30ms->30m0s, "1h30m" 1h0m0.03s->1h30m0s
+	//	CHANGED    "1h"/"2h" were REJECTED (unknown unit "hs") and now parse
+	//
+	// So the honest summary is not "nothing changes", it is that the only values
+	// whose meaning changes are ones that were already being silently corrupted.
+	//
+	// Exposure audited before merge (BLO-28842); it is empty on every path:
+	//   - values this package wrote are safe: Value() emits
+	//     time.Duration.String(), which always ends in "s".
+	//   - values read from the DB are safe structurally, not just empirically.
+	//     Every duration-typed column is Postgres `interval`, which renders as
+	//     hh:mm:ss ("00:30:00" -> 30m0s, verified old and new); Postgres never
+	//     emits the bare "30m" form that this change reinterprets.
+	//   - hand-authored config is therefore the only exposed population, and
+	//     every duration in the live fleet configs ends in "s" ("23h59m0s",
+	//     "0s", "10s"): multicast configuration/remote_configs/bc1_default.json,
+	//     bc1_pull_aws.json, cmd/caddy/tests_cfg/autosave.json.
+	//
+	// A profile hand-written as "5m" WOULD change meaning (5ms -> 5m). That is
+	// the point of the fix, but re-audit if a new config source appears.
 	if c := s[len(s)-1]; c >= '0' && c <= '9' {
 		s += "s"
 	}
