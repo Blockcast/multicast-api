@@ -1,0 +1,81 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+#
+# Gate for the root `api` package -- the operator-facing config contract.
+#
+# It exists because BLO-28842 asked for "CI `test` job green in
+# Blockcast/multicast-api" as its verifying signal, and there was no such job.
+# The only workflow here was settlement.yml, deliberately scoped to
+# ./settlement/..., so nothing on CI had ever compiled or tested types.go --
+# including AMTRelayConfig, which two independently written programs encode and
+# decode. A wire contract with no gate is how the BLO-28640 configuration defect
+# reached production.
+#
+# Design notes, so the next person does not "fix" these on sight:
+#
+#   Scope is `.` (the root package), NOT ./... -- `go test ./...` is RED on main
+#   and predates this workflow: fec/TestESIRangeFromRangeListBorderCase fails.
+#   Widen this once that is fixed. The same reasoning is written into
+#   settlement.yml: a gate that is red on day one teaches everyone to ignore it,
+#   so it is worth less than no gate at all.
+#
+#   No `go vet` step, for the same reason and this is NOT an oversight:
+#   `go vet .` also exits 1 on unmodified main (time.go:79, an unkeyed
+#   encoding/xml.Attr literal). Add the vet step in the change that fixes that
+#   line; adding it here would land this gate red.
+#
+#   No `paths:` filter. This is meant to be a REQUIRED status check, and a
+#   path-filtered required check never reports on a PR that misses the paths --
+#   which blocks that PR forever on "Expected -- waiting for status".
+#
+#   `synchronize` is included on purpose: this runs on GitHub-hosted capacity in
+#   well under a minute, and the property being guarded -- that the root package
+#   stays edge-safe and its wire format stays stable -- is exactly the kind that
+#   regresses on a later push to the same branch.
+#
+#   The two wasm builds are load-bearing, not decoration. The multicast edge
+#   compiles this package for js/wasm, wasip1/wasm and TinyGo (see "Constraint:
+#   the edge builds for wasm and TinyGo" in the README). That constraint is why
+#   AMTMode is a local string enum here instead of an import of go-amt, whose
+#   core is cgo -- these steps are what stop someone "simplifying" that into an
+#   import and silently breaking the edge.
+
+name: API Contract
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  api-contract:
+    name: api-contract
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Test
+        run: go test -count=1 .
+
+      # Proves the root package stays reachable from the multicast edge in the
+      # no-persist configuration. Adding -tags persist here would fail on
+      # lib/pq by design; that is the documented boundary, not a bug.
+      - name: Build for js/wasm
+        run: GOOS=js GOARCH=wasm go build .
+
+      - name: Build for wasip1/wasm
+        run: GOOS=wasip1 GOARCH=wasm go build .

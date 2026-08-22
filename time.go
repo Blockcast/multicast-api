@@ -121,10 +121,74 @@ func (d *Duration) Scan(value interface{}) error {
 	default:
 		return fmt.Errorf("cannot sql.Scan() Duration from: %#v", v)
 	}
+	// An empty value has to be an error, not a panic. The length-1 indexing
+	// below is unguarded, and Duration is reachable from the wire through
+	// UnmarshalJSON, so `"timeout": ""` -- exactly what a half-filled profile
+	// clone or a templated config with an unset variable produces -- would
+	// otherwise take the process down with `index out of range [-1]` from
+	// inside encoding/json.
+	//
+	// A config loader has to be able to say WHICH key is malformed, which is
+	// the same reason AMTMode.UnmarshalText rejects a typo'd mode instead of
+	// reading it as the zero value. A returned error and a runtime panic are
+	// not the same failure mode for a wire contract (BLO-28842).
+	if s == "" {
+		return fmt.Errorf("cannot sql.Scan() Duration from empty string")
+	}
 	// Convert format of hh:mm:ss into format parseable by time.ParseDuration()
 	s = strings.Replace(s, ":", "h", 1)
 	s = strings.Replace(s, ":", "m", 1)
-	if s[len(s)-1] != 's' {
+	// Append the unit only when the value ENDS IN A DIGIT, i.e. it is a bare
+	// count ("30") or the tail of the hh:mm:ss form rewritten above
+	// ("00h01m30"). The previous condition was `s[len(s)-1] != 's'`, which
+	// appended to anything not already ending in "s" and so silently corrupted
+	// every minute- and hour-suffixed duration:
+	//
+	//	"1m"    -> "1ms"    = 1 millisecond, not 1 minute   (60000x too small)
+	//	"30m"   -> "30ms"   = 30 milliseconds
+	//	"1h30m" -> "1h30ms" = 1h0m0.03s
+	//	"1h"    -> "1hs"    = error, `unknown unit "hs"`
+	//
+	// No error was returned for the first three: the operator got a duration
+	// they did not write. That is the BLO-28640 failure mode exactly -- a probe
+	// window far shorter than intended destroys the native join -- and
+	// ProbeWindow and RelayHandshakeTimeout are new operator-facing duration
+	// keys where "1m" is an entirely natural thing to write, so this is now
+	// reachable in a way it was not before (BLO-28842).
+	//
+	// SCOPE: this is the shared Duration.Scan, so what follows changes decoding
+	// for EVERY Duration in this package, not only the two AMT keys named above.
+	// That is DeliveryMethod.StartOffset, .Duration, .RepairWindow,
+	// KeepUpdateInterval and CarouselScheduledInterval behind their `db:` tags,
+	// plus DeliveryMethod.SignalInterval ("interval") on the wire.
+	//
+	// It is deliberately NOT value-preserving for one input class. Precisely:
+	//
+	//	unchanged  ends in a digit ("30", "00:01:30") or in an explicit unit
+	//	           ("90s", "50ms", "1m30s", "1us")
+	//	unchanged  everything that errors today still errors ("abc", "10x", "1d")
+	//	CHANGED    minute/hour-suffixed values now mean what they say:
+	//	           "1m" 1ms->1m0s, "30m" 30ms->30m0s, "1h30m" 1h0m0.03s->1h30m0s
+	//	CHANGED    "1h"/"2h" were REJECTED (unknown unit "hs") and now parse
+	//
+	// So the honest summary is not "nothing changes", it is that the only values
+	// whose meaning changes are ones that were already being silently corrupted.
+	//
+	// Exposure audited before merge (BLO-28842); it is empty on every path:
+	//   - values this package wrote are safe: Value() emits
+	//     time.Duration.String(), which always ends in "s".
+	//   - values read from the DB are safe structurally, not just empirically.
+	//     Every duration-typed column is Postgres `interval`, which renders as
+	//     hh:mm:ss ("00:30:00" -> 30m0s, verified old and new); Postgres never
+	//     emits the bare "30m" form that this change reinterprets.
+	//   - hand-authored config is therefore the only exposed population, and
+	//     every duration in the live fleet configs ends in "s" ("23h59m0s",
+	//     "0s", "10s"): multicast configuration/remote_configs/bc1_default.json,
+	//     bc1_pull_aws.json, cmd/caddy/tests_cfg/autosave.json.
+	//
+	// A profile hand-written as "5m" WOULD change meaning (5ms -> 5m). That is
+	// the point of the fix, but re-audit if a new config source appears.
+	if c := s[len(s)-1]; c >= '0' && c <= '9' {
 		s += "s"
 	}
 	dur, err := time.ParseDuration(s)

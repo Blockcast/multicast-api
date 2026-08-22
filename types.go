@@ -98,9 +98,56 @@ func (s StringSlice) Contains(str string) bool {
 }
 
 type AMTRelayConfig struct {
-	Address string   `json:"address"`
-	Port    uint16   `json:"port"`
+	Address string `json:"address"`
+	Port    uint16 `json:"port"`
+
+	// Timeout is the DEPRECATED single knob that used to drive both the native
+	// probe window and the AMT relay handshake bound. It is retained because it
+	// is inherited by profile clone across the fleet, so removing it would be a
+	// fleet-wide config break.
+	//
+	// Prefer ProbeWindow and RelayHandshakeTimeout. When either of those is
+	// unset, this value seeds it -- see EffectiveProbeWindow and
+	// EffectiveRelayHandshakeTimeout for the precedence rule and for why this
+	// seeds BOTH rather than only the handshake bound.
+	//
+	// Deprecated: set ProbeWindow and RelayHandshakeTimeout instead.
 	Timeout Duration `json:"timeout"`
+
+	// Mode selects native multicast versus an AMT tunnel explicitly, instead of
+	// leaving it to be inferred from whether Address happens to be populated.
+	// The zero value means AMTModeAuto, so profiles written before this field
+	// existed are unchanged on upgrade. See AMTMode.
+	Mode AMTMode `json:"mode,omitempty"`
+
+	// ProbeWindow is how long to wait for native multicast traffic before
+	// concluding the native path is dead and handing over to an AMT tunnel. It
+	// is only consulted in AMTModeAuto.
+	//
+	// This is one of the two bounds Timeout used to conflate. It is sized
+	// against the signalling cadence of the stream being received, NOT against
+	// the round trip to the relay.
+	//
+	// Zero means UNSET, not "do not probe": the value is then seeded from the
+	// deprecated Timeout. An explicit "probeWindow": "0s" is therefore
+	// indistinguishable from omitting the key, and (because of omitempty) is
+	// dropped on re-marshal. That is deliberate rather than a gap -- "hand over
+	// to the tunnel immediately, without probing" is already spelled
+	// Mode: AMTModeTunnel, which says it in one place instead of encoding it as
+	// a degenerate window. If a future change needs to tell the two apart, this
+	// field has to become *Duration.
+	ProbeWindow Duration `json:"probeWindow,omitempty"`
+
+	// RelayHandshakeTimeout bounds the AMT relay handshake -- one round trip to
+	// Address. It is unrelated to ProbeWindow and is typically far smaller.
+	//
+	// This is the other bound Timeout used to conflate. Production once ran a
+	// single 50ms value for both, which destroyed the native join and then gave
+	// the replacement tunnel 50ms to complete a handshake, so neither path came
+	// up (BLO-28640).
+	//
+	// Zero means UNSET and is seeded from Timeout, exactly as for ProbeWindow.
+	RelayHandshakeTimeout Duration `json:"relayHandshakeTimeout,omitempty"`
 
 	// DRIAD (RFC 8777) - enable automatic relay discovery via DNS
 	UseDRIAD bool `json:"useDriad,omitempty"`
