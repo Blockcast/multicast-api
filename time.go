@@ -331,7 +331,13 @@ type RRuleSet struct {
 	Dtend   TimeZ  `json:"dtend"`
 	Rrule   *RRule `json:"rrule,omitempty"`
 	//Exrule  *RRule  `json:"exrule,omitempty"`
-	Rdate  []TimeZ `json:"ddate,omitempty"`
+	// "rdate", not "ddate": this is the RFC 5545 name and, decisively, the key
+	// Postgres `_rrule.jsonb_to_rruleset` / `_rrule.rruleset_to_jsonb` speak.
+	// The tag read "ddate" until BLO-35199 -- a typo that made rdate fail to
+	// round-trip in BOTH directions, silently and without error: on write the
+	// DB dropped the unrecognised key, and on read Scan() left Rdate nil no
+	// matter what the row held. See TestRRuleSetRdateJSONRoundTrip.
+	Rdate  []TimeZ `json:"rdate,omitempty"`
 	Exdate []TimeZ `json:"exdate,omitempty"`
 }
 
@@ -361,7 +367,11 @@ func (r RRuleSet) RRuleSet() (*rrule.Set, error) {
 
 	var exdates []time.Time
 	for _, xd := range r.Exdate {
-		rdates = append(exdates, time.Time(xd))
+		// Appends to exdates. Until BLO-35199 this read
+		// `rdates = append(exdates, ...)`, so exdates stayed nil and
+		// SetExDates was always a no-op -- every exclusion date was
+		// silently discarded by the expander.
+		exdates = append(exdates, time.Time(xd))
 	}
 	set.SetExDates(exdates)
 	return set, nil
