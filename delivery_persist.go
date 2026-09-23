@@ -5,6 +5,7 @@ package api
 import (
 	"database/sql/driver"
 	"fmt"
+	"math"
 	"net/netip"
 	"strconv"
 	"strings"
@@ -169,9 +170,13 @@ func (t *MulticastEndpointAddressType) Scan(src interface{}) error {
 		return err
 	}
 
-	var destPort int
-	if destPort, err = strconv.Atoi(x[2]); len(x[2]) > 0 && err != nil {
-		return err
+	// Same hazard as parseFECUint: the int4 field can hold a port the uint16
+	// cannot, and a plain conversion wraps it (65600 -> 64, -1 -> 65535).
+	var destPort uint64
+	if len(x[2]) > 0 {
+		if destPort, err = strconv.ParseUint(x[2], 10, 16); err != nil {
+			return fmt.Errorf("MulticastEndpointAddressType destPort %q does not fit uint16: %w", x[2], err)
+		}
 	}
 	t.DestPort = uint16(destPort)
 
@@ -247,12 +252,18 @@ func (s *FECEncoding) Scan(src any) error {
 	case string:
 		in = v
 	case int64:
+		if v < 0 || v > math.MaxUint8 {
+			return fmt.Errorf("FECEncoding.Scan: %d does not fit uint8", v)
+		}
 		*s = FECEncoding(v)
 		return nil
 	default:
 		return fmt.Errorf("scan invalid type: %T", src)
 	}
-	if n, err := strconv.Atoi(in); err == nil {
+	// ParseUint at uint8 width, not Atoi: "256" must not wrap to 0, a real
+	// encoding (Compact-No-Code). An out-of-range number falls through to
+	// the name lookup below and is refused there.
+	if n, err := strconv.ParseUint(in, 10, 8); err == nil {
 		*s = FECEncoding(n)
 		return nil
 	}

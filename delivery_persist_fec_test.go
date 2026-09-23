@@ -146,3 +146,29 @@ func TestFECParamsScanKeepsInRangeExtremes(t *testing.T) {
 		t.Fatalf("in-range extremes did not round-trip: %+v", got)
 	}
 }
+
+// destPort is scanned from an int4 field through the fec_params composite, so it
+// has the same wrap hazard: 65600 would read back as port 64 and -1 as 65535.
+func TestMulticastEndpointScanRefusesPortTheFieldCannotHold(t *testing.T) {
+	for _, port := range []string{"65536", "65600", "-1"} {
+		var ep MulticastEndpointAddressType
+		err := ep.Scan([]byte("(69.25.95.101,232.99.0.10," + port + ",0)"))
+		if err == nil {
+			t.Fatalf("destPort %s scanned as %d, want an error", port, ep.DestPort)
+		}
+		if !strings.Contains(err.Error(), "destPort") {
+			t.Fatalf("error %q does not name destPort", err)
+		}
+	}
+	var fec FECParamsType
+	if err := fec.Scan([]byte(`{"(6,0,0.25,1312,32,4,\"{\"\"(69.25.95.101,232.99.0.10,65600,0)\"\"}\")"}`)); err == nil {
+		t.Fatalf("fec_params with destPort 65600 scanned without error")
+	}
+	var ep MulticastEndpointAddressType
+	if err := ep.Scan([]byte("(69.25.95.101,232.99.0.10,65535,0)")); err != nil || ep.DestPort != 65535 {
+		t.Fatalf("destPort 65535 = %d, %v; want 65535, nil", ep.DestPort, err)
+	}
+	if err := ep.Scan([]byte("(69.25.95.101,232.99.0.10,,0)")); err != nil || ep.DestPort != 0 {
+		t.Fatalf("empty destPort = %d, %v; want 0, nil", ep.DestPort, err)
+	}
+}
