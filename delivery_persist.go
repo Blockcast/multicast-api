@@ -157,19 +157,24 @@ func (t *MulticastEndpointAddressType) Scan(src interface{}) error {
 	}
 	t.DestPort = uint16(destPort)
 
-	var tsi int
-	if tsi, err = strconv.Atoi(x[3]); len(x[3]) > 0 && err != nil {
-		return err
-	} else {
-		tsi64 := uint64(tsi)
-		t.TSI = &tsi64
+	// An empty field is a NULL sessionId: leave TSI nil rather than reading
+	// it as session 0.
+	t.TSI = nil
+	if len(x[3]) > 0 {
+		tsi, err := strconv.ParseUint(x[3], 10, 64)
+		if err != nil {
+			return err
+		}
+		t.TSI = &tsi
 	}
 	return nil
 }
 
 // Value implements the database/sql/driver Valuer interface.
 func (t MulticastEndpointAddressType) Value() (driver.Value, error) {
-	tsiStr := "null"
+	// Postgres spells a NULL composite field as an empty one; the literal
+	// `null` is rejected by the int column.
+	tsiStr := ""
 	if t.TSI != nil {
 		tsiStr = strconv.FormatInt(int64(*t.TSI), 10)
 	}
