@@ -58,3 +58,41 @@ func TestFECParamsScanDualStackEndpointValues(t *testing.T) {
 		t.Errorf("endpoint[1] group = %q, want ff3e::232:99:10", got)
 	}
 }
+
+// A multicast endpoint's sessionId (TSI) is optional. Postgres spells a NULL
+// composite field as an empty one, so a nil TSI must be written as `...,)` and
+// read back as nil; writing the literal `null` makes every INSERT/UPDATE of such
+// a delivery method fail with "invalid syntax for field type integer: null".
+func TestMulticastEndpointNilTSIRoundTrips(t *testing.T) {
+	var ep MulticastEndpointAddressType
+	if err := ep.Scan([]byte("(69.25.95.101,232.99.0.10,5050,)")); err != nil {
+		t.Fatalf("Scan of a NULL sessionId failed: %v", err)
+	}
+	if ep.TSI != nil {
+		t.Fatalf("NULL sessionId scanned as %d, want nil", *ep.TSI)
+	}
+	v, err := ep.Value()
+	if err != nil {
+		t.Fatalf("Value failed: %v", err)
+	}
+	if got, want := v, "(69.25.95.101,232.99.0.10,5050,)"; got != want {
+		t.Fatalf("Value() = %q, want %q", got, want)
+	}
+}
+
+func TestMulticastEndpointZeroTSIStaysZero(t *testing.T) {
+	var ep MulticastEndpointAddressType
+	if err := ep.Scan([]byte("(69.25.95.101,232.99.0.10,5050,0)")); err != nil {
+		t.Fatalf("Scan failed: %v", err)
+	}
+	if ep.TSI == nil || *ep.TSI != 0 {
+		t.Fatalf("sessionId 0 scanned as %v, want 0", ep.TSI)
+	}
+	v, err := ep.Value()
+	if err != nil {
+		t.Fatalf("Value failed: %v", err)
+	}
+	if got, want := v, "(69.25.95.101,232.99.0.10,5050,0)"; got != want {
+		t.Fatalf("Value() = %q, want %q", got, want)
+	}
+}
