@@ -64,13 +64,13 @@ func (t *FECParamType) Scan(src interface{}) error {
 		return fmt.Errorf("FECParamType is not length 7")
 	}
 	var err error
-	var val int
-	if val, err = strconv.Atoi(x[0]); len(x[0]) > 0 && err != nil {
+	var val uint64
+	if val, err = parseFECUint(x[0], "encoding", 8); err != nil {
 		return err
 	}
 	t.Encoding = FECEncoding(val)
 
-	if val, err = strconv.Atoi(x[1]); len(x[1]) > 0 && err != nil {
+	if val, err = parseFECUint(x[1], "codePoint", 8); err != nil {
 		return err
 	}
 	t.CodePoint = CodePoint(val)
@@ -79,17 +79,17 @@ func (t *FECParamType) Scan(src interface{}) error {
 		return err
 	}
 
-	if val, err = strconv.Atoi(x[3]); len(x[3]) > 0 && err != nil {
+	if val, err = parseFECUint(x[3], "symLength", 16); err != nil {
 		return err
 	}
 	t.SymbolLen = uint16(val)
 
-	if val, err = strconv.Atoi(x[4]); len(x[4]) > 0 && err != nil {
+	if val, err = parseFECUint(x[4], "maxSbLen", 32); err != nil {
 		return err
 	}
 	t.MaxSrcBlockLen = uint32(val)
 
-	if val, err = strconv.Atoi(x[5]); len(x[5]) > 0 && err != nil {
+	if val, err = parseFECUint(x[5], "numEsPerGroup", 32); err != nil {
 		return err
 	}
 	t.NumEsPerGroup = uint32(val)
@@ -111,6 +111,24 @@ func (t *FECParamType) Scan(src interface{}) error {
 		return err
 	}
 	return nil
+}
+
+// parseFECUint reads one integer field of the fec_params composite at the
+// width of the Go field it fills. The columns are int4, so a row can hold a
+// value the field cannot represent: a negative, or a symLength above 65535.
+// A plain conversion would wrap it into a different, plausible value -- 65600
+// would read back as symLength 64 -- so an out-of-range field is an error that
+// names it. An empty (NULL) field still reads as 0, as before, and consumers
+// refuse 0 as missing.
+func parseFECUint(field, name string, bits int) (uint64, error) {
+	if len(field) == 0 {
+		return 0, nil
+	}
+	val, err := strconv.ParseUint(field, 10, bits)
+	if err != nil {
+		return 0, fmt.Errorf("FECParamType %s %q does not fit uint%d: %w", name, field, bits, err)
+	}
+	return val, nil
 }
 
 // Value implements the database	/sql/driver Valuer interface.
