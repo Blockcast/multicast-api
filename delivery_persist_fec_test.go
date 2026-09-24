@@ -1,6 +1,9 @@
 package api
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // Canonical `fec_params[]::text` as returned by Postgres (captured from the
 // staging traffic_ops DB via `SELECT ARRAY[ROW(...)::fec_params]::fec_params[]::text`)
@@ -94,5 +97,78 @@ func TestMulticastEndpointZeroTSIStaysZero(t *testing.T) {
 	}
 	if got, want := v, "(69.25.95.101,232.99.0.10,5050,0)"; got != want {
 		t.Fatalf("Value() = %q, want %q", got, want)
+	}
+}
+
+// fecDBText builds the canonical fec_params[] text for one block with the
+// given integer fields and a single endpoint, as Postgres returns it.
+func fecDBText(encoding, codePoint, symLength, maxSbLen, numEsPerGroup string) string {
+	return `{"(` + encoding + `,` + codePoint + `,0.25,` + symLength + `,` + maxSbLen + `,` + numEsPerGroup +
+		`,\"{\"\"(69.25.95.101,232.99.0.10,5050,0)\"\"}\")"}`
+}
+
+// The int4 columns can hold values the Go fields cannot. Each must be refused
+// by name rather than wrapped into a different, plausible value.
+func TestFECParamsScanRefusesValuesTheFieldCannotHold(t *testing.T) {
+	cases := []struct {
+		name, text, field string
+	}{
+		{"symLength above uint16", fecDBText("6", "0", "65600", "32", "4"), "symLength"},
+		{"negative symLength", fecDBText("6", "0", "-8", "32", "4"), "symLength"},
+		{"negative maxSbLen", fecDBText("6", "0", "1312", "-1", "4"), "maxSbLen"},
+		{"negative numEsPerGroup", fecDBText("6", "0", "1312", "32", "-4"), "numEsPerGroup"},
+		{"encoding above uint8", fecDBText("256", "0", "1312", "32", "4"), "encoding"},
+		{"negative codePoint", fecDBText("6", "-1", "1312", "32", "4"), "codePoint"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var fec FECParamsType
+			err := fec.Scan([]byte(c.text))
+			if err == nil {
+				t.Fatalf("Scan accepted %s; got %+v", c.name, fec)
+			}
+			if !strings.Contains(err.Error(), c.field) {
+				t.Fatalf("error %q does not name %s", err, c.field)
+			}
+		})
+	}
+}
+
+// The largest value each field holds still reads back unchanged.
+func TestFECParamsScanKeepsInRangeExtremes(t *testing.T) {
+	var fec FECParamsType
+	if err := fec.Scan([]byte(fecDBText("255", "255", "65535", "4294967295", "4294967295"))); err != nil {
+		t.Fatalf("Scan failed: %v", err)
+	}
+	got := fec[0]
+	if got.Encoding != 255 || got.CodePoint != 255 || got.SymbolLen != 65535 ||
+		got.MaxSrcBlockLen != 4294967295 || got.NumEsPerGroup != 4294967295 {
+		t.Fatalf("in-range extremes did not round-trip: %+v", got)
+	}
+}
+
+// destPort is scanned from an int4 field through the fec_params composite, so it
+// has the same wrap hazard: 65600 would read back as port 64 and -1 as 65535.
+func TestMulticastEndpointScanRefusesPortTheFieldCannotHold(t *testing.T) {
+	for _, port := range []string{"65536", "65600", "-1"} {
+		var ep MulticastEndpointAddressType
+		err := ep.Scan([]byte("(69.25.95.101,232.99.0.10," + port + ",0)"))
+		if err == nil {
+			t.Fatalf("destPort %s scanned as %d, want an error", port, ep.DestPort)
+		}
+		if !strings.Contains(err.Error(), "destPort") {
+			t.Fatalf("error %q does not name destPort", err)
+		}
+	}
+	var fec FECParamsType
+	if err := fec.Scan([]byte(`{"(6,0,0.25,1312,32,4,\"{\"\"(69.25.95.101,232.99.0.10,65600,0)\"\"}\")"}`)); err == nil {
+		t.Fatalf("fec_params with destPort 65600 scanned without error")
+	}
+	var ep MulticastEndpointAddressType
+	if err := ep.Scan([]byte("(69.25.95.101,232.99.0.10,65535,0)")); err != nil || ep.DestPort != 65535 {
+		t.Fatalf("destPort 65535 = %d, %v; want 65535, nil", ep.DestPort, err)
+	}
+	if err := ep.Scan([]byte("(69.25.95.101,232.99.0.10,,0)")); err != nil || ep.DestPort != 0 {
+		t.Fatalf("empty destPort = %d, %v; want 0, nil", ep.DestPort, err)
 	}
 }

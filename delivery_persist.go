@@ -5,6 +5,7 @@ package api
 import (
 	"database/sql/driver"
 	"fmt"
+	"math"
 	"net/netip"
 	"strconv"
 	"strings"
@@ -64,13 +65,13 @@ func (t *FECParamType) Scan(src interface{}) error {
 		return fmt.Errorf("FECParamType is not length 7")
 	}
 	var err error
-	var val int
-	if val, err = strconv.Atoi(x[0]); len(x[0]) > 0 && err != nil {
+	var val uint64
+	if val, err = parseFECUint(x[0], "encoding", 8); err != nil {
 		return err
 	}
 	t.Encoding = FECEncoding(val)
 
-	if val, err = strconv.Atoi(x[1]); len(x[1]) > 0 && err != nil {
+	if val, err = parseFECUint(x[1], "codePoint", 8); err != nil {
 		return err
 	}
 	t.CodePoint = CodePoint(val)
@@ -79,17 +80,17 @@ func (t *FECParamType) Scan(src interface{}) error {
 		return err
 	}
 
-	if val, err = strconv.Atoi(x[3]); len(x[3]) > 0 && err != nil {
+	if val, err = parseFECUint(x[3], "symLength", 16); err != nil {
 		return err
 	}
 	t.SymbolLen = uint16(val)
 
-	if val, err = strconv.Atoi(x[4]); len(x[4]) > 0 && err != nil {
+	if val, err = parseFECUint(x[4], "maxSbLen", 32); err != nil {
 		return err
 	}
 	t.MaxSrcBlockLen = uint32(val)
 
-	if val, err = strconv.Atoi(x[5]); len(x[5]) > 0 && err != nil {
+	if val, err = parseFECUint(x[5], "numEsPerGroup", 32); err != nil {
 		return err
 	}
 	t.NumEsPerGroup = uint32(val)
@@ -111,6 +112,24 @@ func (t *FECParamType) Scan(src interface{}) error {
 		return err
 	}
 	return nil
+}
+
+// parseFECUint reads one integer field of the fec_params composite at the
+// width of the Go field it fills. The columns are int4, so a row can hold a
+// value the field cannot represent: a negative, or a symLength above 65535.
+// A plain conversion would wrap it into a different, plausible value -- 65600
+// would read back as symLength 64 -- so an out-of-range field is an error that
+// names it. An empty (NULL) field still reads as 0, as before, and consumers
+// refuse 0 as missing.
+func parseFECUint(field, name string, bits int) (uint64, error) {
+	if len(field) == 0 {
+		return 0, nil
+	}
+	val, err := strconv.ParseUint(field, 10, bits)
+	if err != nil {
+		return 0, fmt.Errorf("FECParamType %s %q does not fit uint%d: %w", name, field, bits, err)
+	}
+	return val, nil
 }
 
 // Value implements the database	/sql/driver Valuer interface.
@@ -151,9 +170,13 @@ func (t *MulticastEndpointAddressType) Scan(src interface{}) error {
 		return err
 	}
 
-	var destPort int
-	if destPort, err = strconv.Atoi(x[2]); len(x[2]) > 0 && err != nil {
-		return err
+	// Same hazard as parseFECUint: the int4 field can hold a port the uint16
+	// cannot, and a plain conversion wraps it (65600 -> 64, -1 -> 65535).
+	var destPort uint64
+	if len(x[2]) > 0 {
+		if destPort, err = strconv.ParseUint(x[2], 10, 16); err != nil {
+			return fmt.Errorf("MulticastEndpointAddressType destPort %q does not fit uint16: %w", x[2], err)
+		}
 	}
 	t.DestPort = uint16(destPort)
 
@@ -229,12 +252,18 @@ func (s *FECEncoding) Scan(src any) error {
 	case string:
 		in = v
 	case int64:
+		if v < 0 || v > math.MaxUint8 {
+			return fmt.Errorf("FECEncoding.Scan: %d does not fit uint8", v)
+		}
 		*s = FECEncoding(v)
 		return nil
 	default:
 		return fmt.Errorf("scan invalid type: %T", src)
 	}
-	if n, err := strconv.Atoi(in); err == nil {
+	// ParseUint at uint8 width, not Atoi: "256" must not wrap to 0, a real
+	// encoding (Compact-No-Code). An out-of-range number falls through to
+	// the name lookup below and is refused there.
+	if n, err := strconv.ParseUint(in, 10, 8); err == nil {
 		*s = FECEncoding(n)
 		return nil
 	}

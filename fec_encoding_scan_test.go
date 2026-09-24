@@ -40,6 +40,13 @@ func TestFECEncodingScanErrors(t *testing.T) {
 		[]byte("garbage"),
 		3.14,
 		nil,
+		// Numbers the uint8 cannot hold must be refused, not wrapped: 256 and
+		// 512 would otherwise read back as 0 (Compact-No-Code), -1 as 255.
+		"256",
+		"512",
+		"-1",
+		int64(256),
+		int64(-1),
 	} {
 		t.Run("bad input", func(t *testing.T) {
 			var got FECEncoding
