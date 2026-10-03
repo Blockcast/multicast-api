@@ -40,7 +40,7 @@ type FeedOf[T any] struct {
 	once      sync2.Once    // ensures that init only runs once
 	sendLock  chan struct{} // sendLock has a one-element buffer and is empty when held.It protects sendCases.
 	removeSub chan chan<- T // interrupts Send
-	sendCases caseList      // the active set of select cases used by Send
+	sendCases caseList      // the active set of select cases used by Send; every write also holds mu, which Size reads it under
 	mu        sync.RWMutex  // The inbox holds newly subscribed channels until they are added to sendCases.
 	inbox     caseList
 }
@@ -49,7 +49,9 @@ func (f *FeedOf[T]) init() {
 	f.removeSub = make(chan chan<- T)
 	f.sendLock = make(chan struct{}, 1)
 	f.sendLock <- struct{}{}
+	f.mu.Lock()
 	f.sendCases = caseList{{Chan: reflect.ValueOf(f.removeSub), Dir: reflect.SelectRecv}}
+	f.mu.Unlock()
 }
 
 // Subscribe adds a channel to the feed. Future sends will be delivered on the channel
@@ -137,7 +139,9 @@ func (f *FeedOf[T]) Send(value T) (nsent int) {
 		chosen, recv, _ := reflect.Select(cases)
 		if chosen == 0 /* <-f.removeSub */ {
 			index := f.sendCases.find(recv.Interface())
+			f.mu.Lock()
 			f.sendCases = f.sendCases.delete(index)
+			f.mu.Unlock()
 			if index >= 0 && index < len(cases) {
 				// Shrink 'cases' too because the removed case was still active.
 				cases = f.sendCases[:len(cases)-1]
@@ -176,6 +180,11 @@ func (sub *feedOfSub[T]) Unsubscribe() {
 func (sub *feedOfSub[T]) Err() <-chan error {
 	return sub.err
 }
+
+// Size returns len(inbox)+len(sendCases). Once the feed is initialized
+// sendCases also holds the internal removeSub case, so an initialized feed with
+// no subscribers reports 1 and one with n subscribers reports n+1; a feed that
+// was never subscribed to or sent on reports 0.
 func (f *FeedOf[T]) Size() int {
 	f.mu.RLock()
 	ret := len(f.inbox) + len(f.sendCases)
