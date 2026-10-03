@@ -68,8 +68,10 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # -race: FeedOf's lock invariants (util_test.go) only fail under the race
+      # detector, and downstream callers (multicast) run their suites under it.
       - name: Test
-        run: go test -count=1 .
+        run: go test -race -count=1 .
 
       # Proves the root package stays reachable from the multicast edge in the
       # no-persist configuration. Adding -tags persist here would fail on

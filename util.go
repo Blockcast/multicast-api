@@ -38,9 +38,9 @@ type Subscription interface {
 // The zero value is ready to use.
 type FeedOf[T any] struct {
 	once      sync2.Once    // ensures that init only runs once
-	sendLock  chan struct{} // sendLock has a one-element buffer and is empty when held.It protects sendCases.
+	sendLock  chan struct{} // sendLock has a one-element buffer and is empty when held. It protects sendCases' elements and Send's use of them.
 	removeSub chan chan<- T // interrupts Send
-	sendCases caseList      // the active set of select cases used by Send; every write also holds mu, which Size reads it under
+	sendCases caseList      // the active set of select cases used by Send; assignments to the slice also hold mu, so Size can read its length
 	mu        sync.RWMutex  // The inbox holds newly subscribed channels until they are added to sendCases.
 	inbox     caseList
 }
@@ -139,8 +139,9 @@ func (f *FeedOf[T]) Send(value T) (nsent int) {
 		chosen, recv, _ := reflect.Select(cases)
 		if chosen == 0 /* <-f.removeSub */ {
 			index := f.sendCases.find(recv.Interface())
+			remaining := f.sendCases.delete(index)
 			f.mu.Lock()
-			f.sendCases = f.sendCases.delete(index)
+			f.sendCases = remaining
 			f.mu.Unlock()
 			if index >= 0 && index < len(cases) {
 				// Shrink 'cases' too because the removed case was still active.
