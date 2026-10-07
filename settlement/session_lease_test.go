@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"math/big"
@@ -862,8 +863,10 @@ func TestNSDecimalRejectsJSONNumber(t *testing.T) {
 		// this one rides on stdlib behaviour, so pin it.
 		{"json null", `null`, true, 0},
 		// Passes canonicalDecimal (it is syntactically 0|[1-9][0-9]*) and must
-		// still fail on strconv.ParseInt's range check. Pins the ordering:
-		// shape first, then range.
+		// still fail on strconv.ParseInt's range check: in-shape is not in-range,
+		// and only the range check rejects this one. Which check fires is not
+		// observable -- both return the same ErrInvalidSessionLease -- so this
+		// pins the rejection, not the ordering.
 		{"overflows int64", `"99999999999999999999"`, true, 0},
 		{"canonical zero", `"0"`, false, 0},
 		{"canonical ns", `"1767225600000000000"`, false, 1767225600000000000},
@@ -937,5 +940,17 @@ func TestCanonicalSessionLeaseJSONGolden(t *testing.T) {
 	}
 	if string(got) != want {
 		t.Fatalf("preimage bytes changed\n got: %s\nwant: %s", got, want)
+	}
+	// The canonical JSON is only the last term of the signed preimage. Pin the
+	// digest too, so a change to the domain separator, to RecordKind, or to how
+	// the 0x00 separator is concatenated also fails here rather than one repo
+	// over as a total signature failure.
+	const wantDigest = "b8b02023b6244e7bab59ba59ad7f2d56697ec2aab3645d85edebacd8aa76c237"
+	digest, err := sessionLeaseDigest(lease)
+	if err != nil {
+		t.Fatalf("sessionLeaseDigest: %v", err)
+	}
+	if hex.EncodeToString(digest[:]) != wantDigest {
+		t.Fatalf("signed digest changed\n got: %s\nwant: %s", hex.EncodeToString(digest[:]), wantDigest)
 	}
 }
