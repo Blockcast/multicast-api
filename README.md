@@ -107,8 +107,8 @@ When you change one of these:
   open should not need anything else to encode it correctly.
 - Say what is covered by the signature or digest and what is not.
 - State units explicitly. `SessionLease` timestamps are Unix *nanoseconds* and
-  exceed 2^53, which silently breaks any implementation that round-trips them
-  through a JavaScript number.
+  exceed 2^53, which is why the signed JSON carries them as canonical decimal
+  strings rather than numbers — a JavaScript number cannot round-trip them.
 - Prefer adding a field over repurposing one. Both consumers pin versions, so
   the two sides run different code for a while by construction.
 

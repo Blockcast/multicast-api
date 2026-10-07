@@ -47,6 +47,7 @@ import (
 	"net"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -70,6 +71,70 @@ var (
 	ErrUnsupportedLeaseSignerKey = errors.New("settlement: unsupported session lease signing key")
 )
 
+// NSDecimal is a semantic u64 -- here always a Unix-nanosecond instant or a
+// nanosecond duration -- carried in signed JSON as a CANONICAL DECIMAL STRING
+// rather than as a JSON number.
+//
+// Settlement contract v2 Section 1 requires this encoding (`Uint64Decimal`)
+// for every semantic u64 in a signed record, and the reason is specific to
+// RFC 8785: JCS Section 3.2.2.3 serializes numbers through ECMAScript
+// `Number::toString`, i.e. IEEE-754 double. A nanosecond epoch is ~1.77e18,
+// far above 2^53, so distinct instants collapse onto the same canonical bytes
+// and a conformant JS verifier derives a different preimage from the one Go's
+// encoding/json produces for the same lease. Go printing the exact int64 is
+// what hid this; it is also precisely what makes Go's output non-conformant.
+// A decimal string has no such range.
+//
+// `settlement_version` stays a JSON number: the schema pins it `const: 2`, it
+// is nowhere near 2^53, and it is the one field already conformant on every
+// side.
+//
+// The Go type stays signed 64-bit so arithmetic on it is ordinary; the
+// narrower domain is deliberate and is enforced at both ends -- MarshalJSON
+// refuses a negative value, and UnmarshalJSON accepts only a JSON string
+// matching `0|[1-9][0-9]*`, so a JSON number never decodes into one of these
+// fields.
+type NSDecimal int64
+
+func (n NSDecimal) MarshalJSON() ([]byte, error) {
+	if n < 0 {
+		return nil, ErrInvalidSessionLease
+	}
+	return []byte(`"` + strconv.FormatInt(int64(n), 10) + `"`), nil
+}
+
+func (n *NSDecimal) UnmarshalJSON(data []byte) error {
+	var encoded string
+	if err := json.Unmarshal(data, &encoded); err != nil {
+		return ErrInvalidSessionLease
+	}
+	if !canonicalDecimal(encoded) {
+		return ErrInvalidSessionLease
+	}
+	parsed, err := strconv.ParseInt(encoded, 10, 64)
+	if err != nil {
+		return ErrInvalidSessionLease
+	}
+	*n = NSDecimal(parsed)
+	return nil
+}
+
+// canonicalDecimal reports whether s is `0|[1-9][0-9]*`. strconv.ParseInt
+// alone is not enough: it accepts "+1" and "007", which are distinct byte
+// strings for the same value, and the preimage is bytes. Two implementations
+// that disagree about which spelling to emit sign different digests.
+func canonicalDecimal(s string) bool {
+	if s == "" || (len(s) > 1 && s[0] == '0') {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 // SessionLease is the signed record authorizing one multicast delivery session,
 // and the unit the settlement rail pays out against.
 //
@@ -89,12 +154,10 @@ var (
 // prefix are what stop a lease digest from colliding with the digest of some
 // other blockcast record that happens to serialize the same way.
 //
-// # Timestamps are UNIX NANOSECONDS
+// # Timestamps are UNIX NANOSECONDS, encoded as DECIMAL STRINGS
 //
-// Not seconds, not milliseconds. They exceed 2^53 routinely, so any
-// implementation that round-trips them through an ECMAScript number corrupts
-// the preimage and fails every signature check. Preserve the integer encoding
-// exactly.
+// Not seconds, not milliseconds. They exceed 2^53 routinely, which is exactly
+// why they are not JSON numbers: see [NSDecimal].
 type SessionLease struct {
 	// RecordKind is always "SessionLease". It is validated AND mixed into the
 	// digest prefix, so it is what prevents a lease from being reinterpreted as
@@ -138,9 +201,9 @@ type SessionLease struct {
 	// SessionLeaseMaxLifetime. Verify judges the window against its own clock
 	// with SessionLeaseMaxClockSkew of tolerance, never against a
 	// caller-supplied time.
-	IssuedAtNS  int64 `json:"issued_at_ns"`
-	NotBeforeNS int64 `json:"not_before_ns"`
-	ExpiresAtNS int64 `json:"expires_at_ns"`
+	IssuedAtNS  NSDecimal `json:"issued_at_ns"`
+	NotBeforeNS NSDecimal `json:"not_before_ns"`
+	ExpiresAtNS NSDecimal `json:"expires_at_ns"`
 	// LeaseNonce is exactly 32 random bytes, base64url without padding. It makes
 	// two leases with otherwise identical contents distinct records.
 	LeaseNonce string `json:"lease_nonce"`
@@ -148,7 +211,7 @@ type SessionLease struct {
 	// before the session stops being billable. It is signed and pinned: Verify
 	// rejects any value other than SessionLeaseMaxBeaconGap, so a minter cannot
 	// widen its own billing window.
-	MaxBeaconGapNS int64 `json:"max_beacon_gap_ns"`
+	MaxBeaconGapNS NSDecimal `json:"max_beacon_gap_ns"`
 	// IssuerKeyID selects the verification key. It is derived from the signing
 	// certificate's SPIFFE URI and public key, and is signed, so it cannot be
 	// pointed at a different key after minting.
@@ -317,11 +380,11 @@ func (s *SessionLeaseSigner) Issue(req SessionLeaseRequest) (SessionLease, error
 		Group:             group,
 		RoutingMIVersion:  req.RoutingMIVersion,
 		LCUMHOrigin:       req.LCUMHOrigin,
-		IssuedAtNS:        now.UnixNano(),
-		NotBeforeNS:       now.UnixNano(),
-		ExpiresAtNS:       now.Add(lifetime).UnixNano(),
+		IssuedAtNS:        NSDecimal(now.UnixNano()),
+		NotBeforeNS:       NSDecimal(now.UnixNano()),
+		ExpiresAtNS:       NSDecimal(now.Add(lifetime).UnixNano()),
 		LeaseNonce:        base64.RawURLEncoding.EncodeToString(nonce),
-		MaxBeaconGapNS:    SessionLeaseMaxBeaconGap.Nanoseconds(),
+		MaxBeaconGapNS:    NSDecimal(SessionLeaseMaxBeaconGap.Nanoseconds()),
 		IssuerKeyID:       s.KeyID,
 	}
 	digest, err := sessionLeaseDigest(lease)
@@ -465,7 +528,7 @@ func validateSessionLease(lease SessionLease, at time.Time) error {
 		return ErrInvalidSessionLease
 	}
 	nonce, err := base64.RawURLEncoding.DecodeString(lease.LeaseNonce)
-	if err != nil || len(nonce) != 32 || lease.MaxBeaconGapNS != SessionLeaseMaxBeaconGap.Nanoseconds() {
+	if err != nil || len(nonce) != 32 || lease.MaxBeaconGapNS != NSDecimal(SessionLeaseMaxBeaconGap.Nanoseconds()) {
 		return ErrInvalidSessionLease
 	}
 	lifetime := time.Duration(lease.ExpiresAtNS - lease.NotBeforeNS)
@@ -475,35 +538,35 @@ func validateSessionLease(lease SessionLease, at time.Time) error {
 	if at.IsZero() {
 		at = time.Now().UTC()
 	}
-	if at.Add(SessionLeaseMaxClockSkew).Before(time.Unix(0, lease.NotBeforeNS)) || !at.Add(-SessionLeaseMaxClockSkew).Before(time.Unix(0, lease.ExpiresAtNS)) {
+	if at.Add(SessionLeaseMaxClockSkew).Before(time.Unix(0, int64(lease.NotBeforeNS))) || !at.Add(-SessionLeaseMaxClockSkew).Before(time.Unix(0, int64(lease.ExpiresAtNS))) {
 		return ErrLeaseExpired
 	}
 	return nil
 }
 
-// canonicalSessionLeaseJSON emits the deterministic Go JSON representation for
-// the v2 lease preimage. Fields are declared in lexicographic key order and
-// lease strings are constrained to printable ASCII. Nanosecond timestamps can
-// exceed JCS's safe-integer range, so other implementations must preserve the
-// integer encoding exactly rather than relying on ECMAScript numbers.
+// canonicalSessionLeaseJSON emits the deterministic RFC 8785 representation
+// for the v2 lease preimage. Fields are declared in lexicographic key order
+// and lease strings are constrained to printable ASCII. The four nanosecond
+// fields are [NSDecimal], so they appear as canonical decimal strings and
+// carry no dependence on how an implementation serializes large numbers.
 func canonicalSessionLeaseJSON(lease SessionLease) ([]byte, error) {
 	preimage := struct {
-		ExpiresAtNS       int64  `json:"expires_at_ns"`
-		GatewayID         string `json:"gateway_id"`
-		Group             string `json:"group"`
-		IssuedAtNS        int64  `json:"issued_at_ns"`
-		IssuerKeyID       string `json:"issuer_key_id"`
-		LCUMHOrigin       string `json:"lc_umh_origin"`
-		LeaseID           string `json:"lease_id"`
-		LeaseNonce        string `json:"lease_nonce"`
-		MaxBeaconGapNS    int64  `json:"max_beacon_gap_ns"`
-		NotBeforeNS       int64  `json:"not_before_ns"`
-		RecordKind        string `json:"record_kind"`
-		RoutingMIVersion  string `json:"routing_mi_version"`
-		SettlementVersion uint64 `json:"settlement_version"`
-		SID               string `json:"sid"`
-		Source            string `json:"source"`
-		SupplierID        string `json:"supplier_id"`
+		ExpiresAtNS       NSDecimal `json:"expires_at_ns"`
+		GatewayID         string    `json:"gateway_id"`
+		Group             string    `json:"group"`
+		IssuedAtNS        NSDecimal `json:"issued_at_ns"`
+		IssuerKeyID       string    `json:"issuer_key_id"`
+		LCUMHOrigin       string    `json:"lc_umh_origin"`
+		LeaseID           string    `json:"lease_id"`
+		LeaseNonce        string    `json:"lease_nonce"`
+		MaxBeaconGapNS    NSDecimal `json:"max_beacon_gap_ns"`
+		NotBeforeNS       NSDecimal `json:"not_before_ns"`
+		RecordKind        string    `json:"record_kind"`
+		RoutingMIVersion  string    `json:"routing_mi_version"`
+		SettlementVersion uint64    `json:"settlement_version"`
+		SID               string    `json:"sid"`
+		Source            string    `json:"source"`
+		SupplierID        string    `json:"supplier_id"`
 	}{
 		ExpiresAtNS: lease.ExpiresAtNS, GatewayID: lease.GatewayID, Group: lease.Group,
 		IssuedAtNS: lease.IssuedAtNS, IssuerKeyID: lease.IssuerKeyID, LCUMHOrigin: lease.LCUMHOrigin,
