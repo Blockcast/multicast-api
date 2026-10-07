@@ -829,3 +829,62 @@ func TestDecodeSessionLeaseRejectsTrailingValue(t *testing.T) {
 		})
 	}
 }
+
+// TestNSDecimalRejectsJSONNumber pins contract v2 Section 1's "Validators MUST
+// reject JSON numbers" for the four signed nanosecond fields, and pins the
+// canonical spelling on the way in. A number is the pre-BLO-41024 encoding, so
+// without this a regression would be silently accepted and signed into a
+// preimage no conformant JS verifier derives.
+//
+// "007" and "+1" matter for a separate reason: strconv.ParseInt accepts both,
+// they denote the same value as "7" and "1", and they are DIFFERENT BYTES. The
+// preimage is bytes, so admitting them would let two implementations agree on
+// the value and sign different digests.
+//
+// This test is duplicated verbatim in trafficcontrol lib/go-mvpnlease, which
+// verifies what this package signs. Keep the two in step.
+func TestNSDecimalRejectsJSONNumber(t *testing.T) {
+	for _, tc := range []struct {
+		name, encoded string
+		wantErr       bool
+		want          NSDecimal
+	}{
+		{"json number", `1767225600000000000`, true, 0},
+		{"zero as number", `0`, true, 0},
+		{"float", `1.77e18`, true, 0},
+		{"leading zeros", `"007"`, true, 0},
+		{"explicit plus", `"+1"`, true, 0},
+		{"negative string", `"-1"`, true, 0},
+		{"empty string", `""`, true, 0},
+		{"canonical zero", `"0"`, false, 0},
+		{"canonical ns", `"1767225600000000000"`, false, 1767225600000000000},
+		{"canonical gap", `"30000000000"`, false, 30000000000},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var got NSDecimal
+			err := json.Unmarshal([]byte(tc.encoded), &got)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("Unmarshal(%s) = %d, want error", tc.encoded, got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Unmarshal(%s): %v", tc.encoded, err)
+			}
+			if got != tc.want {
+				t.Fatalf("Unmarshal(%s) = %d, want %d", tc.encoded, got, tc.want)
+			}
+			round, err := json.Marshal(got)
+			if err != nil {
+				t.Fatalf("Marshal(%d): %v", got, err)
+			}
+			if string(round) != tc.encoded {
+				t.Fatalf("round trip = %s, want %s", round, tc.encoded)
+			}
+		})
+	}
+	if _, err := json.Marshal(NSDecimal(-1)); err == nil {
+		t.Fatal("Marshal(-1) succeeded; a negative value is not a u64 and must not reach the preimage")
+	}
+}
