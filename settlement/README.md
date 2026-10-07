@@ -73,9 +73,12 @@ the bytes changes the meaning:
   covering every field except `RecordDigest` and `Signature`, in lexicographic
   key order. Adding a field to the struct without adding it to
   `canonicalSessionLeaseJSON` leaves that field unsigned and mutable in flight.
-- **Timestamps are Unix nanoseconds** and routinely exceed 2^53. Any
-  implementation that round-trips them through an ECMAScript number corrupts the
-  preimage and fails every signature check.
+- **Timestamps are Unix nanoseconds** and routinely exceed 2^53, which is why
+  they are canonical decimal **strings** in the signed JSON, not JSON numbers —
+  see [`NSDecimal`]. Any implementation that emits them as numbers corrupts the
+  preimage and fails every signature check. The spelling is exact
+  (`0|[1-9][0-9]*`): `"007"` and `"+7"` are rejected, because the preimage is
+  bytes and two spellings of one value sign different digests.
 - **Addresses are canonicalized before signing.** `Issue` normalizes
   `Source`/`Group` through `net.ParseIP(...).String()`, and the rate limiter keys
   on that same canonical form. Both halves matter: without them `::1` and

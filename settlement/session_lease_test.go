@@ -856,6 +856,15 @@ func TestNSDecimalRejectsJSONNumber(t *testing.T) {
 		{"explicit plus", `"+1"`, true, 0},
 		{"negative string", `"-1"`, true, 0},
 		{"empty string", `""`, true, 0},
+		// json.Unmarshal into a string is a documented no-op for a literal
+		// null, so null is rejected only by the empty-string arm of
+		// canonicalDecimal. Every other invalid input has an explicit check;
+		// this one rides on stdlib behaviour, so pin it.
+		{"json null", `null`, true, 0},
+		// Passes canonicalDecimal (it is syntactically 0|[1-9][0-9]*) and must
+		// still fail on strconv.ParseInt's range check. Pins the ordering:
+		// shape first, then range.
+		{"overflows int64", `"99999999999999999999"`, true, 0},
 		{"canonical zero", `"0"`, false, 0},
 		{"canonical ns", `"1767225600000000000"`, false, 1767225600000000000},
 		{"canonical gap", `"30000000000"`, false, 30000000000},
@@ -886,5 +895,47 @@ func TestNSDecimalRejectsJSONNumber(t *testing.T) {
 	}
 	if _, err := json.Marshal(NSDecimal(-1)); err == nil {
 		t.Fatal("Marshal(-1) succeeded; a negative value is not a u64 and must not reach the preimage")
+	}
+}
+
+// TestCanonicalSessionLeaseJSONGolden pins the exact preimage bytes for a fixed
+// lease. Every other test in this package is a symmetric round-trip through
+// this same code, so both sides move together and a preimage change merges
+// green here — surfacing one repo over, at re-vendor time, as a total signature
+// failure. This is the only assertion in this repository that fails on the
+// commit that changes the bytes.
+//
+// If this test fails you have changed the wire contract. That is sometimes
+// correct, but it is never incidental: update the golden, bump
+// SessionLeaseSettlementVersion if the change is breaking, and land the
+// verifiers in the same window. trafficcontrol lib/go-mvpnlease pins the same
+// bytes against the published contract v2 Section 1 vector.
+func TestCanonicalSessionLeaseJSONGolden(t *testing.T) {
+	lease := SessionLease{
+		ExpiresAtNS:       1767225600000000000,
+		GatewayID:         "gw-1",
+		Group:             "ff3e::1234",
+		IssuedAtNS:        1767225000000000000,
+		IssuerKeyID:       "key-1",
+		LCUMHOrigin:       "origin-1",
+		LeaseID:           "lease-1",
+		LeaseNonce:        "nonce-1",
+		MaxBeaconGapNS:    30000000000,
+		NotBeforeNS:       1767225000000000000,
+		RecordKind:        "SessionLease",
+		RoutingMIVersion:  "mi-1",
+		SettlementVersion: SessionLeaseSettlementVersion,
+		SID:               "sid-1",
+		Source:            "2001:db8::1",
+		SupplierID:        "supplier-1",
+	}
+	// The four ns fields are quoted; settlement_version is a bare number.
+	const want = `{"expires_at_ns":"1767225600000000000","gateway_id":"gw-1","group":"ff3e::1234","issued_at_ns":"1767225000000000000","issuer_key_id":"key-1","lc_umh_origin":"origin-1","lease_id":"lease-1","lease_nonce":"nonce-1","max_beacon_gap_ns":"30000000000","not_before_ns":"1767225000000000000","record_kind":"SessionLease","routing_mi_version":"mi-1","settlement_version":2,"sid":"sid-1","source":"2001:db8::1","supplier_id":"supplier-1"}`
+	got, err := canonicalSessionLeaseJSON(lease)
+	if err != nil {
+		t.Fatalf("canonicalSessionLeaseJSON: %v", err)
+	}
+	if string(got) != want {
+		t.Fatalf("preimage bytes changed\n got: %s\nwant: %s", got, want)
 	}
 }
