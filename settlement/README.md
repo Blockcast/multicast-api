@@ -11,6 +11,12 @@ API detail lives in the Go doc comments (`go doc github.com/blockcast/multicast-
 This file covers what those comments cannot: why the package is here, and what
 you must not break.
 
+`session_lease.go` is the source of truth and the copy flows one way, godoc into
+here. Godoc link syntax does not: `[NSDecimal]` resolves in `session_lease.go`
+and renders as literal brackets in Markdown, which this file has no link
+definitions to satisfy. Spell type names in backticks when you copy a doc
+comment across.
+
 ## Why this package exists
 
 Because it was two files instead of one, and they drifted.
@@ -75,7 +81,7 @@ the bytes changes the meaning:
   `canonicalSessionLeaseJSON` leaves that field unsigned and mutable in flight.
 - **Timestamps are Unix nanoseconds** and routinely exceed 2^53, which is why
   they are canonical decimal **strings** in the signed JSON, not JSON numbers —
-  see [`NSDecimal`]. Any implementation that emits them as numbers corrupts the
+  see the `NSDecimal` type. Any implementation that emits them as numbers corrupts the
   preimage and fails every signature check. The spelling is exact
   (`0|[1-9][0-9]*`): `"007"` and `"+7"` are rejected, because the preimage is
   bytes and two spellings of one value sign different digests.
