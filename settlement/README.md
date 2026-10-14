@@ -133,5 +133,6 @@ matter, because they come from the linker:
 tinygo build -o /dev/null -target=wasi ./path/to/a/main/that/calls/every/exported/symbol
 ```
 
-`crypto/x509` and `crypto/ecdsa` are the load-bearing dependencies here; both
-compile under TinyGo 0.41.1.
+`crypto/x509`, `crypto/ecdsa` and `crypto/ed25519` are the load-bearing
+dependencies here; the first two compile under TinyGo 0.41.1, and the Ed25519
+sign/verify path links under TinyGo 0.39.0 (`-target=wasi`).

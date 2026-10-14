@@ -1,7 +1,9 @@
 package settlement
 
 import (
+	"crypto"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
@@ -741,10 +743,11 @@ func TestVerificationKeyIsImmutableAfterRegistration(t *testing.T) {
 	}
 	certKey.X, certKey.Y = attacker.X, attacker.Y
 
-	if key.PublicKey.X.Cmp(originalX) != 0 || key.PublicKey.Y.Cmp(originalY) != 0 {
+	registered := key.PublicKey.(*ecdsa.PublicKey)
+	if registered.X.Cmp(originalX) != 0 || registered.Y.Cmp(originalY) != 0 {
 		t.Fatal("registered key followed the caller's mutation: verification is bound to caller-writable memory")
 	}
-	if key.PublicKey.Equal(&attacker.PublicKey) {
+	if registered.Equal(&attacker.PublicKey) {
 		t.Fatal("registered key became the attacker's key after a post-registration swap")
 	}
 
@@ -772,11 +775,13 @@ func TestVerificationKeyRejectsUnusableSignerKey(t *testing.T) {
 
 	for _, tc := range []struct {
 		name string
-		key  *ecdsa.PublicKey
+		key  crypto.PublicKey
 	}{
 		{"off-curve point", &ecdsa.PublicKey{Curve: elliptic.P256(), X: big.NewInt(1), Y: big.NewInt(1)}},
 		{"nil coordinates", &ecdsa.PublicKey{Curve: elliptic.P256()}},
 		{"nil curve", &ecdsa.PublicKey{X: big.NewInt(1), Y: big.NewInt(1)}},
+		{"short ed25519 key", ed25519.PublicKey(make([]byte, ed25519.PublicKeySize-1))},
+		{"unsupported key type", &rsaLikePublicKey{}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, cert := testSessionLeaseCertificate(t, now, "gateway-1")
@@ -953,4 +958,120 @@ func TestCanonicalSessionLeaseJSONGolden(t *testing.T) {
 	if hex.EncodeToString(digest[:]) != wantDigest {
 		t.Fatalf("signed digest changed\n got: %s\nwant: %s", hex.EncodeToString(digest[:]), wantDigest)
 	}
+}
+
+// rsaLikePublicKey stands in for any key type other than ECDSA and Ed25519.
+type rsaLikePublicKey struct{}
+
+// TestSessionLeaseEd25519IssueVerify covers the key type every Magma gateway
+// certificate actually carries (BLO-46499): the bootstrapper issues Ed25519
+// keys fleet-wide, so a signer that only took ECDSA could not sign at all.
+func TestSessionLeaseEd25519IssueVerify(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0).UTC()
+	key, cert := testSessionLeaseEd25519Certificate(t, now)
+	signer, err := NewSessionLeaseSigner("author-1", "gateway-1", "bcast.id", cert, key, nil)
+	if err != nil {
+		t.Fatalf("NewSessionLeaseSigner(Ed25519): %v", err)
+	}
+	signer.Now = func() time.Time { return now }
+	lease, err := signer.Issue(SessionLeaseRequest{
+		SID: "session-1", Source: "192.0.2.1", Group: "232.0.2.1",
+		RoutingMIVersion: "2.0-routing", LCUMHOrigin: "64512:1:1",
+		ClientIP: net.ParseIP("203.0.113.9"), Lifetime: time.Minute,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Ed25519 signs the same record_digest bytes ECDSA does.
+	digest, err := hex.DecodeString(lease.RecordDigest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signature, err := base64.RawURLEncoding.DecodeString(lease.Signature)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ed25519.Verify(key.Public().(ed25519.PublicKey), digest, signature) {
+		t.Fatal("signature is not an Ed25519 signature over record_digest")
+	}
+
+	vk, keyID, err := (SessionLeaseVerifier{TrustDomain: "bcast.id"}).VerificationKey(cert, "author-1", "gateway-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if keyID != lease.IssuerKeyID {
+		t.Fatalf("key ID = %q, want %q", keyID, lease.IssuerKeyID)
+	}
+	verifier := SessionLeaseVerifier{TrustDomain: "bcast.id", Keys: map[string]SessionLeaseVerificationKey{keyID: vk}}
+	if err := verifier.Verify(lease, now.Add(10*time.Second)); err != nil {
+		t.Fatalf("Verify(Ed25519 lease): %v", err)
+	}
+
+	flipped := lease
+	signature[0] ^= 1
+	flipped.Signature = base64.RawURLEncoding.EncodeToString(signature)
+	if err := verifier.Verify(flipped, now.Add(10*time.Second)); !errors.Is(err, ErrInvalidLeaseSignature) {
+		t.Fatalf("Verify(flipped Ed25519 signature) = %v, want ErrInvalidLeaseSignature", err)
+	}
+
+	// The caller still owns the certificate's key bytes; overwriting them after
+	// registration must not change what verifies.
+	copy(cert.PublicKey.(ed25519.PublicKey), make([]byte, ed25519.PublicKeySize))
+	if err := verifier.Verify(lease, now.Add(10*time.Second)); err != nil {
+		t.Fatalf("registered Ed25519 key followed the caller's mutation: %v", err)
+	}
+}
+
+func TestSessionLeaseSignerRejectsKeyCertMismatch(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0).UTC()
+	edKey, edCert := testSessionLeaseEd25519Certificate(t, now)
+	ecKey, ecCert := testSessionLeaseCertificate(t, now, "gateway-1")
+	_, otherEd, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherEC, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name string
+		cert *x509.Certificate
+		key  crypto.Signer
+	}{
+		{"ed25519 cert, other ed25519 key", edCert, otherEd},
+		{"ed25519 cert, ecdsa key", edCert, ecKey},
+		{"ecdsa cert, other ecdsa key", ecCert, otherEC},
+		{"ecdsa cert, ed25519 key", ecCert, edKey},
+		{"truncated ed25519 key", edCert, edKey[:ed25519.PrivateKeySize-1]},
+		{"typed nil ecdsa key", ecCert, (*ecdsa.PrivateKey)(nil)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := NewSessionLeaseSigner("author-1", "gateway-1", "bcast.id", tc.cert, tc.key, nil); !errors.Is(err, ErrIdentityBindingInvalid) {
+				t.Fatalf("NewSessionLeaseSigner err = %v, want ErrIdentityBindingInvalid", err)
+			}
+		})
+	}
+}
+
+func testSessionLeaseEd25519Certificate(t *testing.T, now time.Time) (ed25519.PrivateKey, *x509.Certificate) {
+	t.Helper()
+	public, key, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity, err := url.Parse("spiffe://bcast.id/v1/tenant/author-1/gateway/gateway-1/iss/bcast.id/aud/cdn")
+	if err != nil {
+		t.Fatal(err)
+	}
+	template := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "gateway-1"}, NotBefore: now.Add(-time.Hour), NotAfter: now.Add(time.Hour), URIs: []*url.URL{identity}, KeyUsage: x509.KeyUsageDigitalSignature}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, public, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cert, err := x509.ParseCertificate(der)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return key, cert
 }

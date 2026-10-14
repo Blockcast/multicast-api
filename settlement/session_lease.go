@@ -33,7 +33,9 @@ package settlement
 
 import (
 	"bytes"
+	"crypto"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/x509"
@@ -245,7 +247,10 @@ type SessionLeaseSigner struct {
 	SupplierID string
 	GatewayID  string
 	KeyID      string
-	PrivateKey *ecdsa.PrivateKey
+	// PrivateKey is a *ecdsa.PrivateKey or an ed25519.PrivateKey. Magma's
+	// bootstrapper issues every gateway certificate with an Ed25519 key, so
+	// both are first-class; the certificate's key type picks the algorithm.
+	PrivateKey crypto.Signer
 	Limiter    *SessionLeaseLimiter
 	Now        func() time.Time
 	// Rand is the entropy source for the lease ID, nonce, and signature.
@@ -287,12 +292,13 @@ type SessionLeaseVerificationKey struct {
 	SupplierID string
 	GatewayID  string
 	SPIFFEURI  string
-	PublicKey  *ecdsa.PublicKey
+	// PublicKey is a *ecdsa.PublicKey or an ed25519.PublicKey.
+	PublicKey crypto.PublicKey
 }
 
 // NewSessionLeaseSigner binds lease signing to the key and gateway SPIFFE URI
 // carried by the supplier certificate.
-func NewSessionLeaseSigner(supplierID, gatewayID, trustDomain string, cert *x509.Certificate, privateKey *ecdsa.PrivateKey, limiter *SessionLeaseLimiter) (*SessionLeaseSigner, error) {
+func NewSessionLeaseSigner(supplierID, gatewayID, trustDomain string, cert *x509.Certificate, privateKey crypto.Signer, limiter *SessionLeaseLimiter) (*SessionLeaseSigner, error) {
 	if supplierID == "" || gatewayID == "" || !sessionLeaseSPIFFEPathSegment(trustDomain) || cert == nil || privateKey == nil || !sessionLeaseStringsASCII(supplierID, gatewayID) {
 		return nil, ErrIdentityBindingInvalid
 	}
@@ -303,8 +309,22 @@ func NewSessionLeaseSigner(supplierID, gatewayID, trustDomain string, cert *x509
 	if supplierID != certSupplierID {
 		return nil, ErrIdentityBindingInvalid
 	}
-	certPublic, ok := cert.PublicKey.(*ecdsa.PublicKey)
-	if !ok || !certPublic.Equal(&privateKey.PublicKey) {
+	// The certificate's key type selects the algorithm; the private key must
+	// be the same type AND the same key, so a mismatch is refused here rather
+	// than surfacing as leases that never verify.
+	var signerPublic crypto.PublicKey
+	switch k := privateKey.(type) {
+	case *ecdsa.PrivateKey:
+		if k != nil {
+			signerPublic = &k.PublicKey
+		}
+	case ed25519.PrivateKey:
+		if len(k) == ed25519.PrivateKeySize {
+			signerPublic = k.Public()
+		}
+	}
+	certPublic, err := cloneLeaseSignerKey(cert.PublicKey)
+	if err != nil || signerPublic == nil || !certPublic.(interface{ Equal(crypto.PublicKey) bool }).Equal(signerPublic) {
 		return nil, ErrIdentityBindingInvalid
 	}
 	keyID, err := sessionLeaseKeyID(spiffeURI, certPublic)
@@ -392,7 +412,7 @@ func (s *SessionLeaseSigner) Issue(req SessionLeaseRequest) (SessionLease, error
 		return SessionLease{}, err
 	}
 	lease.RecordDigest = hex.EncodeToString(digest[:])
-	signature, err := ecdsa.SignASN1(entropy, s.PrivateKey, digest[:])
+	signature, err := signSessionLeaseDigest(entropy, s.PrivateKey, digest)
 	if err != nil {
 		return SessionLease{}, err
 	}
@@ -428,10 +448,36 @@ func (v SessionLeaseVerifier) Verify(lease SessionLease, at time.Time) error {
 		return ErrInvalidSessionLease
 	}
 	signature, err := base64.RawURLEncoding.DecodeString(lease.Signature)
-	if err != nil || !ecdsa.VerifyASN1(key.PublicKey, digest[:], signature) {
+	if err != nil || !verifySessionLeaseDigest(key.PublicKey, digest, signature) {
 		return ErrInvalidLeaseSignature
 	}
 	return nil
+}
+
+// signSessionLeaseDigest signs record_digest. Both algorithms sign the same 32
+// digest bytes -- Ed25519 takes them as its message -- so the canonical record
+// and the digest are identical whichever key the gateway holds.
+func signSessionLeaseDigest(entropy io.Reader, key crypto.Signer, digest [32]byte) ([]byte, error) {
+	switch k := key.(type) {
+	case *ecdsa.PrivateKey:
+		return ecdsa.SignASN1(entropy, k, digest[:])
+	case ed25519.PrivateKey:
+		if len(k) != ed25519.PrivateKeySize {
+			return nil, ErrUnsupportedLeaseSignerKey
+		}
+		return ed25519.Sign(k, digest[:]), nil
+	}
+	return nil, ErrUnsupportedLeaseSignerKey
+}
+
+func verifySessionLeaseDigest(key crypto.PublicKey, digest [32]byte, signature []byte) bool {
+	switch k := key.(type) {
+	case *ecdsa.PublicKey:
+		return ecdsa.VerifyASN1(k, digest[:], signature)
+	case ed25519.PublicKey:
+		return len(k) == ed25519.PublicKeySize && ed25519.Verify(k, digest[:], signature)
+	}
+	return false
 }
 
 func (v SessionLeaseVerifier) VerificationKey(cert *x509.Certificate, supplierID, gatewayID string) (SessionLeaseVerificationKey, string, error) {
@@ -445,17 +491,13 @@ func (v SessionLeaseVerifier) VerificationKey(cert *x509.Certificate, supplierID
 	if supplierID != certSupplierID {
 		return SessionLeaseVerificationKey{}, "", ErrIdentityBindingInvalid
 	}
-	publicKey, ok := cert.PublicKey.(*ecdsa.PublicKey)
-	if !ok {
-		return SessionLeaseVerificationKey{}, "", ErrUnsupportedLeaseSignerKey
-	}
 	// The certificate belongs to the caller, so retaining its key POINTER would
 	// leave verification bound to memory the caller can still write. Overwriting
 	// X and Y after registration left the key ID and SPIFFE identity intact --
 	// both are derived once, here -- while Verify began accepting leases signed
 	// by the replacement private key. Copy the coordinates into verifier-owned
 	// state so the key fixed at registration is the key that verifies.
-	ownedKey, err := cloneLeaseSignerKey(publicKey)
+	ownedKey, err := cloneLeaseSignerKey(cert.PublicKey)
 	if err != nil {
 		return SessionLeaseVerificationKey{}, "", err
 	}
@@ -467,17 +509,24 @@ func (v SessionLeaseVerifier) VerificationKey(cert *x509.Certificate, supplierID
 }
 
 // cloneLeaseSignerKey copies a signer public key into verifier-owned state and
-// rejects one that is unusable. A point off the curve is refused rather than
-// stored, so a key that could never produce a valid signature cannot occupy a
+// rejects one that is unusable. Only ECDSA and Ed25519 keys are accepted. A
+// point off the curve or a short Ed25519 key is refused rather than stored, so
+// a key that could never produce a valid signature cannot occupy a
 // registration slot under a legitimate-looking key ID.
-func cloneLeaseSignerKey(key *ecdsa.PublicKey) (*ecdsa.PublicKey, error) {
-	if key == nil || key.Curve == nil || key.X == nil || key.Y == nil {
-		return nil, ErrUnsupportedLeaseSignerKey
+func cloneLeaseSignerKey(key crypto.PublicKey) (crypto.PublicKey, error) {
+	switch k := key.(type) {
+	case *ecdsa.PublicKey:
+		if k == nil || k.Curve == nil || k.X == nil || k.Y == nil || !k.Curve.IsOnCurve(k.X, k.Y) {
+			return nil, ErrUnsupportedLeaseSignerKey
+		}
+		return &ecdsa.PublicKey{Curve: k.Curve, X: new(big.Int).Set(k.X), Y: new(big.Int).Set(k.Y)}, nil
+	case ed25519.PublicKey:
+		if len(k) != ed25519.PublicKeySize {
+			return nil, ErrUnsupportedLeaseSignerKey
+		}
+		return append(ed25519.PublicKey(nil), k...), nil
 	}
-	if !key.Curve.IsOnCurve(key.X, key.Y) {
-		return nil, ErrUnsupportedLeaseSignerKey
-	}
-	return &ecdsa.PublicKey{Curve: key.Curve, X: new(big.Int).Set(key.X), Y: new(big.Int).Set(key.Y)}, nil
+	return nil, ErrUnsupportedLeaseSignerKey
 }
 
 func EncodeSessionLease(lease SessionLease) (string, error) {
@@ -721,7 +770,7 @@ func sessionLeaseSPIFFEPathSegment(segment string) bool {
 	return true
 }
 
-func sessionLeaseKeyID(spiffeURI *url.URL, publicKey *ecdsa.PublicKey) (string, error) {
+func sessionLeaseKeyID(spiffeURI *url.URL, publicKey crypto.PublicKey) (string, error) {
 	if spiffeURI == nil || publicKey == nil {
 		return "", ErrIdentityBindingInvalid
 	}
