@@ -115,6 +115,7 @@ this module, so they run different code for a while **by construction**.
 | --- | --- |
 | `trafficcontrol` | mints leases (control plane) |
 | `multicast` | verifies them on the CMSD delivery path — `cmd/caddy/sender/session_lease.go`, `util/http/cmsd_lease.go` |
+| `multicast` (planned, BLO-46510) | builds the AMT `sdk_unattested` ClientWitness TO ingests — `BuildMVPNWitness` in `mvpn_witness.go` |
 
 ## Testing
 
