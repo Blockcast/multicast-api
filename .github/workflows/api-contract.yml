@@ -58,7 +58,7 @@ permissions:
 jobs:
   api-contract:
     name: api-contract
-    runs-on: ubuntu-latest
+    runs-on: default
     steps:
       - name: Checkout
         uses: actions/checkout@v4
