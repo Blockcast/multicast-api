@@ -27,7 +27,7 @@
 #   path-filtered required check never reports on a PR that misses the paths --
 #   which blocks that PR forever on "Expected -- waiting for status".
 #
-#   `synchronize` is included on purpose: this runs on GitHub-hosted capacity in
+#   `synchronize` is included on purpose: this runs on the disposable ARC-light
 #   well under a minute, and the property being guarded -- that the root package
 #   stays edge-safe and its wire format stays stable -- is exactly the kind that
 #   regresses on a later push to the same branch.
@@ -58,7 +58,9 @@ permissions:
 jobs:
   api-contract:
     name: api-contract
-    runs-on: ubuntu-latest
+    runs-on:
+      group: default-tools
+      labels: arc-light
     steps:
       - name: Checkout
         uses: actions/checkout@v4
