@@ -18,7 +18,8 @@
 #
 #   `synchronize` is included on purpose. Blockcast trims that trigger from
 #   heavy self-hosted suites so pushes to a PR branch do not burn scarce runner
-#   capacity, but this runs on GitHub-hosted capacity in well under a minute.
+#   capacity; this remains on the disposable ARC-light lane and completes in
+#   well under a minute.
 #   Re-checking after every push is the point: the property being guarded is
 #   "no third-party import crept in", and imports creep in on later pushes.
 #
@@ -51,7 +52,9 @@ permissions:
 jobs:
   settlement:
     name: settlement
-    runs-on: ubuntu-latest
+    runs-on:
+      group: default-tools
+      labels: arc-light
     steps:
       - name: Checkout
         uses: actions/checkout@v4
