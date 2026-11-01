@@ -57,6 +57,7 @@ permissions:
 
 jobs:
   api-contract:
+    timeout-minutes: 20
     name: api-contract
     runs-on:
       group: default-tools
