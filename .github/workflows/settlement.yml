@@ -51,6 +51,7 @@ permissions:
 
 jobs:
   settlement:
+    timeout-minutes: 15
     name: settlement
     runs-on:
       group: default-tools
