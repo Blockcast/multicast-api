@@ -59,9 +59,7 @@ jobs:
   api-contract:
     timeout-minutes: 20
     name: api-contract
-    runs-on:
-      group: default-tools
-      labels: arc-light
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
