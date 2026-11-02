@@ -53,7 +53,9 @@ jobs:
   settlement:
     timeout-minutes: 15
     name: settlement
-    runs-on: arc-light
+    runs-on:
+      group: default-tools
+      labels: arc-light
     steps:
       - name: Checkout
         uses: actions/checkout@v4
