@@ -3,7 +3,10 @@ package api
 import (
 	"encoding/json"
 	"net/netip"
+	"os"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -112,5 +115,61 @@ func TestCdnTransportMIRejectsInvalidCarriageOnDecode(t *testing.T) {
 	var mi CdnTransportMI
 	if err := json.Unmarshal(raw, &mi); err == nil {
 		t.Fatal("decode accepted legacy combined token cmaf-route, want error")
+	}
+}
+
+// The routing-MI goldens are shared with cast's emitter
+// (pim-multicast-gateway packages/cast/testdata/routing_mi/): each must decode
+// into the Go schema and re-encode to the same JSON, so neither side can add
+// or rename a wire key alone.
+func TestCdnTransportMIGoldensRoundTrip(t *testing.T) {
+	for _, name := range []string{"moq_youtube", "moq_youtube_repair"} {
+		raw, err := os.ReadFile(filepath.Join("testdata", "routing_mi", name+".golden.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var mi CdnTransportMI
+		if err := json.Unmarshal(raw, &mi); err != nil {
+			t.Fatalf("%s: decode: %v", name, err)
+		}
+		out, err := json.Marshal(mi)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var want, got any
+		if err := json.Unmarshal(raw, &want); err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal(out, &got); err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(want, got) {
+			t.Errorf("%s: re-encoded MI differs from golden:\n got %s", name, out)
+		}
+	}
+}
+
+func TestRoutingRepairGroupsOnWire(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("testdata", "routing_mi", "moq_youtube_repair.golden.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var mi CdnTransportMI
+	if err := json.Unmarshal(raw, &mi); err != nil {
+		t.Fatal(err)
+	}
+	media := mi.Delivery[0].Endpoints[0].Group
+	for _, g := range mi.Delivery[0].Repair {
+		if g.Endpoints[0].Group == media {
+			t.Errorf("%s repair layer %d shares the media group %s", g.Flow, g.Layer, media)
+		}
+	}
+	if got := len(mi.Delivery[0].Repair); got != 3 {
+		t.Errorf("repair groups = %d, want 3", got)
+	}
+	// An entry with no dedicated repair group must not grow a "repair" key.
+	out, _ := json.Marshal(RoutingDeliveryEntry{Carriage: CarriageMMTP})
+	if strings.Contains(string(out), "repair") {
+		t.Errorf("empty Repair serialized: %s", out)
 	}
 }

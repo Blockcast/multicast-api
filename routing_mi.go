@@ -80,6 +80,29 @@ func CarriageForTransportProtocol(p TransportProtocolType) (CdnTransportCarriage
 type RoutingDeliveryEntry struct {
 	Carriage  CdnTransportCarriage           `json:"carriage" required:"true"`
 	Endpoints MulticastEndpointAddressesType `json:"endpoints" required:"true" minItems:"1"`
+	// Repair lists the FEC repair groups of this Delivery Method, one per
+	// repair layer that rides its own (S,G) (BLO-35455). A receiver joins
+	// Endpoints to decode and adds repair groups by loss; a routing consumer
+	// counts them toward footprint and relay capacity. Omitted when every
+	// repair layer rides the media group.
+	Repair []RoutingRepairGroup `json:"repair,omitempty"`
+}
+
+// RoutingRepairFlow names which source flow a repair group protects.
+type RoutingRepairFlow string
+
+const (
+	RepairFlowVideo RoutingRepairFlow = "video"
+	RepairFlowAudio RoutingRepairFlow = "audio"
+)
+
+// RoutingRepairGroup is one FEC repair layer's own multicast group. Layer 0
+// is the flow's base repair track; Endpoints[1:] are other-family twins of
+// Endpoints[0], as on RoutingDeliveryEntry.
+type RoutingRepairGroup struct {
+	Flow      RoutingRepairFlow              `json:"flow" required:"true"`
+	Layer     uint32                         `json:"layer"`
+	Endpoints MulticastEndpointAddressesType `json:"endpoints" required:"true" minItems:"1"`
 }
 
 // RelayEndpoint is one AMT relay a receiver without native multicast
