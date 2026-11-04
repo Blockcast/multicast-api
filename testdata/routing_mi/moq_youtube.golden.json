@@ -1,0 +1,34 @@
+{
+	"service_id": "moq-youtube",
+	"version": "2.0-routing",
+	"delivery": [
+		{
+			"carriage": "mmtp",
+			"endpoints": [
+				{
+					"sourceAddr": "69.25.95.128",
+					"destGroupAddr": "232.1.1.50",
+					"destPort": 8000,
+					"sessionId": null
+				}
+			]
+		},
+		{
+			"carriage": "mmtp",
+			"endpoints": [
+				{
+					"sourceAddr": "69.25.95.128",
+					"destGroupAddr": "232.1.1.51",
+					"destPort": 5001,
+					"sessionId": null
+				}
+			]
+		}
+	],
+	"relay_endpoints": [
+		{
+			"url": "amt-relay.sfo.example",
+			"priority": 1
+		}
+	]
+}
