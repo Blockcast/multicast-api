@@ -86,6 +86,17 @@ type BlockcastStatisticalReport struct {
 	DupErrCount uint64 `xml:"urn:blockcast:metadata:2024:MBMS:extensions dupErrCount,attr,omitempty" json:"dupErrCount,omitempty" db:"dup_err_count"`
 	DupErrBytes uint64 `xml:"urn:blockcast:metadata:2024:MBMS:extensions dupErrBytes,attr,omitempty" json:"dupErrBytes,omitempty" db:"dup_err_bytes"`
 
+	// FEC headroom (BLO-53097). TS 26.346 §9.4 measures reception after FEC, so
+	// these are the only numbers that show how much repair a rescued block used.
+	// FecBlocksRecovered: blocks FEC rebuilt that source delivery had not
+	// supplied. FecDecodeErrors: failed decode attempts (checksum mismatch and
+	// similar), NOT blocks short of K symbols — those are the StaR-all
+	// failed-block lists on each fileURI; a retried block can count more than
+	// once. RecoveredBytes: source bytes FEC reconstructed.
+	FecBlocksRecovered uint64 `xml:"urn:blockcast:metadata:2024:MBMS:extensions fecBlocksRecovered,attr,omitempty" json:"fecBlocksRecovered,omitempty" db:"fec_blocks_recovered"`
+	FecDecodeErrors    uint64 `xml:"urn:blockcast:metadata:2024:MBMS:extensions fecDecodeErrors,attr,omitempty" json:"fecDecodeErrors,omitempty" db:"fec_decode_errors"`
+	RecoveredBytes     uint64 `xml:"urn:blockcast:metadata:2024:MBMS:extensions recoveredBytes,attr,omitempty" json:"recoveredBytes,omitempty" db:"recovered_bytes"`
+
 	// Rate and file information
 	RcvRate  float64            `xml:"urn:blockcast:metadata:2024:MBMS:extensions rcvRate,attr,omitempty" json:"rcvRate,omitempty" db:"rcv_rate"`
 	FileURIs []BlockcastFileURI `xml:"fileURI,omitempty" json:"fileURIs,omitempty" db:"file_uris"`
@@ -95,6 +106,12 @@ type BlockcastStatisticalReport struct {
 type BlockcastFileURI struct {
 	URI              string `xml:",chardata" json:"uri"`
 	ReceptionSuccess *bool  `xml:"receptionSuccess,attr,omitempty"`
+	// StaR-all / StaR-only (TS 26.346 §9.4.6): one entry per source block the
+	// receiver failed to receive, counted before unicast repair, as an
+	// xs:unsignedLong space-separated vector (unsignedLongVectorType). The two
+	// lists are index-aligned.
+	ReceivedSymbolsForFailedBlocks string `xml:"receivedSymbolsForFailedBlocks,attr,omitempty" json:"receivedSymbolsForFailedBlocks,omitempty"`
+	TotalSymbolsForFailedBlocks    string `xml:"totalSymbolsForFailedBlocks,attr,omitempty" json:"totalSymbolsForFailedBlocks,omitempty"`
 
 	// Custom Blockcast extensions
 	TOI            uint64 `xml:"urn:blockcast:metadata:2024:MBMS:extensions toi,attr,omitempty" json:"toi,omitempty"`

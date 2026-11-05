@@ -73,8 +73,13 @@ type KnownReportType string
 type KnownUELocationType string
 
 type ReportProcedureType struct {
-	ServiceURI            []string   `xml:"urn:3gpp:metadata:2005:MBMS:associatedProcedure serviceURI" json:"serviceURI" db:"serviceURI"`
-	SamplePercentage      float64    `xml:"samplePercentage,attr,omitempty" json:"samplePercentage,omitempty" db:"samplePercentage"`
+	ServiceURI []string `xml:"urn:3gpp:metadata:2005:MBMS:associatedProcedure serviceURI" json:"serviceURI" db:"serviceURI"`
+	// SamplePercentage is 0-100, default 100 when the attribute is absent
+	// (TS 26.346 §9.4.2; associatedprocedure.xsd default="100"). Both decoders
+	// apply that default, so a zero here is an explicit "never report"; it is
+	// therefore always marshalled (no omitempty), or an explicit 0 would be
+	// dropped on the wire and read back as 100 (BLO-31640, BLO-53097).
+	SamplePercentage      float64    `xml:"samplePercentage,attr" json:"samplePercentage" db:"samplePercentage"`
 	ForceTimeIndependence bool       `xml:"forceTimeIndependence,attr,omitempty" json:"forceTimeIndependence,omitempty" db:"forceTimeIndependence"`
 	ReportType            ReportType `xml:"reportType,attr,omitempty" json:"reportType,omitempty" db:"reportType"`
 	ReportInterval        string     `xml:"urn:3gpp:metadata:2005:MBMS:associatedProcedure-rel-14-extension reportInterval,attr,omitempty" json:"reportInterval,omitempty" db:"reportInterval"`
@@ -91,6 +96,7 @@ func (t *ReportProcedureType) UnmarshalXML(d *xml.Decoder, start xml.StartElemen
 		ReportType            *ReportType `xml:"reportType,attr,omitempty" json:"reportType,omitempty" db:"reportType"`
 	}
 	overlay.T = (*T)(t)
+	t.SamplePercentage = DefaultSamplePercentage
 	overlay.SamplePercentage = (*float64)(&overlay.T.SamplePercentage)
 	overlay.ForceTimeIndependence = (*bool)(&overlay.T.ForceTimeIndependence)
 	overlay.ReportType = (*ReportType)(&overlay.T.ReportType)
