@@ -2,10 +2,7 @@
 
 package models
 
-import (
-	"encoding/json"
-	"encoding/xml"
-)
+import "encoding/xml"
 
 type AssociatedProcedureType struct {
 	Items               []string               `xml:",any"`
@@ -104,19 +101,6 @@ func (t *ReportProcedureType) UnmarshalXML(d *xml.Decoder, start xml.StartElemen
 	overlay.ForceTimeIndependence = (*bool)(&overlay.T.ForceTimeIndependence)
 	overlay.ReportType = (*ReportType)(&overlay.T.ReportType)
 	return d.DecodeElement(&overlay, &start)
-}
-
-// DefaultSamplePercentage is samplePercentage when the attribute is absent.
-const DefaultSamplePercentage = 100
-
-func (t *ReportProcedureType) UnmarshalJSON(b []byte) error {
-	type T ReportProcedureType
-	v := T{SamplePercentage: DefaultSamplePercentage}
-	if err := json.Unmarshal(b, &v); err != nil {
-		return err
-	}
-	*t = ReportProcedureType(v)
-	return nil
 }
 
 type ReportType string

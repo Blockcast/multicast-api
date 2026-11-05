@@ -5,4 +5,5 @@ package models
 //go:generate xsdgen -o filter.go -pkg models FilterDescription.xsd Filter-Rel-12-schema-snippet.xsd schema-version.xsd
 //go:generate xsdgen -o mlp.go -pkg models -ns MLP_SVC_RESULT_310.dtd mlp_svc_result_310.xsd mlp_svc_init_310.xsd
 //go:generate xsdgen -o security.go -pkg models security.xsd
+// apd.go carries hand edits (BLO-31640); see apd_defaults.go before regenerating.
 //go:generate xsdgen -o apd.go -pkg models adpd-rel-12-extension.xsd       adpd-rel-13-extension.xsd       adpd-rel14-extension.xsd        associatedprocedure.xsd schema-version.xsd
