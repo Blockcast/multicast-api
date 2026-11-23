@@ -96,6 +96,12 @@ type BlockcastStatisticalReport struct {
 	FecBlocksRecovered uint64 `xml:"urn:blockcast:metadata:2024:MBMS:extensions fecBlocksRecovered,attr,omitempty" json:"fecBlocksRecovered,omitempty" db:"fec_blocks_recovered"`
 	FecDecodeErrors    uint64 `xml:"urn:blockcast:metadata:2024:MBMS:extensions fecDecodeErrors,attr,omitempty" json:"fecDecodeErrors,omitempty" db:"fec_decode_errors"`
 	RecoveredBytes     uint64 `xml:"urn:blockcast:metadata:2024:MBMS:extensions recoveredBytes,attr,omitempty" json:"recoveredBytes,omitempty" db:"recovered_bytes"`
+	// ResendBytes (BLO-58877): file bytes filled by a multicast source re-send
+	// (NACK repair or a later carousel pass) — source bytes that landed behind
+	// the object's received high-water mark and were not already held. Disjoint
+	// from RecoveredBytes (FEC) and RprBytes (unicast repair), so first-pass
+	// bytes = file size - ResendBytes - RecoveredBytes - RprBytes.
+	ResendBytes uint64 `xml:"urn:blockcast:metadata:2024:MBMS:extensions resendBytes,attr,omitempty" json:"resendBytes,omitempty" db:"resend_bytes"`
 
 	// Rate and file information
 	RcvRate  float64            `xml:"urn:blockcast:metadata:2024:MBMS:extensions rcvRate,attr,omitempty" json:"rcvRate,omitempty" db:"rcv_rate"`
