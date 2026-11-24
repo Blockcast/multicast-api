@@ -12,7 +12,7 @@ func TestReceptionReportStaRAllAndFECAttrs(t *testing.T) {
 	r := BlockcastReceptionReport{
 		XmlnsBc: "urn:blockcast:metadata:2024:MBMS:extensions",
 		StatisticalReport: BlockcastStatisticalReport{
-			FecBlocksRecovered: 3, FecDecodeErrors: 1, RecoveredBytes: 4096,
+			FecBlocksRecovered: 3, FecDecodeErrors: 1, RecoveredBytes: 4096, ResendBytes: 2048,
 			FileURIs: []BlockcastFileURI{{
 				URI:                            "x",
 				ReceivedSymbolsForFailedBlocks: "10 0",
@@ -28,7 +28,7 @@ func TestReceptionReportStaRAllAndFECAttrs(t *testing.T) {
 	for _, want := range []string{
 		` receivedSymbolsForFailedBlocks="10 0"`,
 		` totalSymbolsForFailedBlocks="32 32"`,
-		`fecBlocksRecovered="3"`, `fecDecodeErrors="1"`, `recoveredBytes="4096"`,
+		`fecBlocksRecovered="3"`, `fecDecodeErrors="1"`, `recoveredBytes="4096"`, `resendBytes="2048"`,
 	} {
 		if !strings.Contains(s, want) {
 			t.Errorf("missing %q in %s", want, s)
@@ -38,7 +38,7 @@ func TestReceptionReportStaRAllAndFECAttrs(t *testing.T) {
 	if err := xml.Unmarshal(b, &back); err != nil {
 		t.Fatal(err)
 	}
-	if got := back.StatisticalReport; got.FecDecodeErrors != 1 || got.FileURIs[0].TotalSymbolsForFailedBlocks != "32 32" {
+	if got := back.StatisticalReport; got.FecDecodeErrors != 1 || got.ResendBytes != 2048 || got.FileURIs[0].TotalSymbolsForFailedBlocks != "32 32" {
 		t.Fatalf("round trip lost fields: %+v", got)
 	}
 }
